@@ -4,8 +4,8 @@ import { StorageModule } from './modules/storage/storage.module'
 import { UserModule } from './modules/user/user.module'
 import { MongooseModule, MongooseModuleOptions } from '@nestjs/mongoose'
 import { AuthModule } from './modules/auth/auth.module'
-import {JwtAuthGuard} from "./modules/auth/guards/jwt-auth.guard";
-import {APP_GUARD} from "@nestjs/core";
+import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard'
+import { APP_GUARD } from '@nestjs/core'
 
 @Module({
   imports: [

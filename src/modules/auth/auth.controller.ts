@@ -1,10 +1,25 @@
-import { Body, Controller, Post, Req, UseGuards } from '@nestjs/common'
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
+import {
+  Body,
+  Controller,
+  NotFoundException,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common'
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConflictResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger'
 import { AuthService } from './auth.service'
 import { RegisterDto } from './dtos/register-local.dto'
 import { LocalAuthGuard } from './guards'
 import { LoginLocalDto } from './dtos/login-local.dto'
-import {Public} from "./decorators";
+import { AuthUser, Public } from './decorators'
+import type { AuthPayload } from './types'
 
 @Controller('auth')
 @ApiTags('Auth')
@@ -24,6 +39,51 @@ export class AuthController {
   @UseGuards(LocalAuthGuard)
   @ApiOperation({ summary: 'Login user local' })
   async handleLogin(@Body() payload: LoginLocalDto, @Req() req) {
-    return this.authService.loginLocal(req.user)
+    return this.authService.loginLocal(req.user, req)
+  }
+
+  @Post('/logout')
+  @ApiOperation({ summary: 'Logout' })
+  @ApiOkResponse({ description: 'Logout successfully.' })
+  @ApiConflictResponse({ description: 'Internal Server Error.' })
+  async logout(@Req() req) {
+    const authHeader = req.headers.authorization
+    const accessToken: string | undefined = authHeader?.split(' ')[1]
+    if (!accessToken) {
+      throw new NotFoundException('No access token found in request')
+    }
+
+    await this.authService.logout(accessToken)
+
+    return { message: 'Logout successfully' }
+  }
+
+  @Post('logout-device')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string' },
+      },
+    },
+  })
+  @ApiOperation({ summary: 'Logout-device' })
+  @ApiOkResponse({ description: 'Logout successfully.' })
+  @ApiConflictResponse({ description: 'Internal Server Error.' })
+  async logoutDevice(
+    @AuthUser() payload: AuthPayload,
+    @Body('sessionId') sessionId: string,
+  ) {
+    await this.authService.logoutDevice(payload.sub, sessionId)
+    return { message: 'Logout successfully' }
+  }
+
+  @Post('logout-all')
+  @ApiOperation({ summary: 'Logout-all' })
+  @ApiOkResponse({ description: 'Logout successfully.' })
+  @ApiConflictResponse({ description: 'Internal Server Error.' })
+  async logoutAll(@AuthUser() payload: AuthPayload) {
+    await this.authService.logoutAll(payload.sub)
+    return { message: 'Logout successfully' }
   }
 }

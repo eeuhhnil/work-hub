@@ -1,4 +1,8 @@
-import { ConflictException, Injectable } from '@nestjs/common'
+import {
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common'
 import { UserService } from '../user/user.service'
 import { RegisterDto } from './dtos/register-local.dto'
 import * as bcrypt from 'bcrypt'
@@ -7,11 +11,15 @@ import { JwtService } from '@nestjs/jwt'
 import { ConfigService } from '@nestjs/config'
 import { UserDocument } from '../user/schemas/user.schema'
 import { SystemRole } from '../../common/enums/system-role'
+import { SessionDocument } from '../session/schemas/session.schema'
+import { SessionService } from '../session/session.service'
+import { UAParser } from 'ua-parser-js'
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly userService: UserService,
+    private readonly sessionService: SessionService,
     private readonly jwt: JwtService,
     private readonly configService: ConfigService,
   ) {}
@@ -29,23 +37,54 @@ export class AuthService {
     })
   }
 
-  async loginLocal(user: UserDocument) {
-    const payload: AuthPayload = {
-      sub: user._id.toString(),
-      email: user.email,
-      role: user.role || SystemRole.USER,
-    }
+  async loginLocal(user: UserDocument, req: any) {
+    const clientInfo = this.getLoginInfo(req)
 
-    return this.generateToken(payload)
+    const session = await this.sessionService.create({
+      ...clientInfo,
+      userId: user._id.toString(),
+    })
+
+    return this.generateToken(user, session)
   }
 
-  async generateToken(payload: AuthPayload) {
+  async logout(token: string) {
+    const payload: any = this.jwt.decode(token)
+
+    const session = await this.sessionService.findOne({ _id: payload.jti })
+
+    if (!session) {
+      throw new UnauthorizedException('Invalid token')
+    }
+
+    await this.sessionService.deleteOne({ _id: session._id })
+  }
+
+  async logoutDevice(userId: string, sessionId: string) {
+    const session = await this.sessionService.findOne({
+      _id: sessionId,
+      userId: userId,
+    })
+
+    if (!session) {
+      throw new UnauthorizedException('Invalid token')
+    }
+
+    await this.sessionService.deleteOne({ _id: session._id })
+  }
+
+  async logoutAll(userId: string) {
+    await this.sessionService.deleteMany({ userId: userId })
+  }
+
+  async generateToken(user: UserDocument, session: SessionDocument) {
     const [access_token, refresh_token] = await Promise.all([
       this.jwt.signAsync(
         {
-          sub: payload.sub.toString(),
-          email: payload.email,
-          role: payload.role,
+          jti: session._id.toString(),
+          sub: user._id.toString(),
+          email: user.email,
+          role: user.role,
         },
         {
           secret: this.configService.get<string>('JWT_SECRET'),
@@ -53,7 +92,8 @@ export class AuthService {
       ),
       this.jwt.signAsync(
         {
-          sub: payload.sub,
+          sub: user._id.toString(),
+          jti: session._id.toString(),
         },
         {
           secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
@@ -101,8 +141,28 @@ export class AuthService {
       .trim()
       .replace(/\s+/g, '-')
       .replace(/[^\w\-]+/g, '')
+      .replace(/[^\w\-]+/g, '')
       .replace(/\-\-+/g, '-')
       .replace(/^-+/, '')
       .replace(/-+$/, '')
+  }
+
+  private getLoginInfo(req: any) {
+    const ip =
+      req.headers['x-forwarded-for']?.toString().split(',')[0] ||
+      req.socket.remoteAddress ||
+      ''
+
+    const userAgent = req.headers['user-agent'] || ''
+    const parser = new UAParser(userAgent)
+    const result = parser.getResult()
+
+    return {
+      ip,
+      deviceName: result.device.model || 'Desktop',
+      browser: result.browser.name || 'Unknown',
+      os: result.os.name || 'Unknown',
+      // userAgent,
+    }
   }
 }
