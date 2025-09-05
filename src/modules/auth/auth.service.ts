@@ -165,4 +165,38 @@ export class AuthService {
       // userAgent,
     }
   }
+
+  async validateGoogleUser(
+    payload: {
+      googleId: string
+      email: string
+      fullName: string
+      avatar?: string
+    },
+    req: any,
+  ) {
+    let user = await this.userService.findOne({ email: payload.email })
+
+    if (!user) {
+      user = await this.userService.create({
+        email: payload.email,
+        fullName: payload.fullName,
+        avatar: payload.avatar,
+        googleId: payload.googleId,
+        username: await this.generateUniqueUsername(payload.fullName),
+      })
+    } else if (!user.googleId) {
+      user.googleId = payload.googleId
+      await user.save()
+    }
+
+    const clientInfo = this.getLoginInfo(req)
+
+    const session = await this.sessionService.create({
+      ...clientInfo,
+      userId: user._id.toString(),
+    })
+
+    return this.generateToken(user, session)
+  }
 }

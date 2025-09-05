@@ -1,9 +1,11 @@
 import {
   Body,
   Controller,
+  Get,
   NotFoundException,
   Post,
   Req,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common'
 import {
@@ -20,6 +22,7 @@ import { LocalAuthGuard } from './guards'
 import { LoginLocalDto } from './dtos/login-local.dto'
 import { AuthUser, Public } from './decorators'
 import type { AuthPayload } from './types'
+import { AuthGuard } from '@nestjs/passport'
 
 @Controller('auth')
 @ApiTags('Auth')
@@ -40,6 +43,21 @@ export class AuthController {
   @ApiOperation({ summary: 'Login user local' })
   async handleLogin(@Body() payload: LoginLocalDto, @Req() req) {
     return this.authService.loginLocal(req.user, req)
+  }
+
+  @Public()
+  @Get('google')
+  @UseGuards(AuthGuard('google'))
+  async auth() {}
+
+  @Public()
+  @UseGuards(AuthGuard('google'))
+  @Get('google/callback')
+  async googleCallback(@Req() req) {
+    if (!req.user)
+      throw new UnauthorizedException('Google authentication failed')
+
+    return req.user
   }
 
   @Post('/logout')
