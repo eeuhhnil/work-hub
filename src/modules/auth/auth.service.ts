@@ -64,7 +64,11 @@ export class AuthService {
     const user = await this.userService.findOne({ email })
     if (!user) throw new UnauthorizedException('User not found')
 
-    const isValid = await this.otpService.verifyOtp(user._id.toString(), code, OtpType.REGISTRATION)
+    const isValid = await this.otpService.verifyOtp(
+      user._id.toString(),
+      code,
+      OtpType.REGISTRATION,
+    )
     if (!isValid) throw new UnauthorizedException('Invalid or expired OTP')
 
     // Activate user
@@ -171,7 +175,11 @@ export class AuthService {
     const user = await this.userService.findOne({ email })
     if (!user) throw new UnauthorizedException('User not found')
 
-    const isValid = await this.otpService.verifyOtp(user._id.toString(), otp, OtpType.PASSWORD_RESET)
+    const isValid = await this.otpService.verifyOtp(
+      user._id.toString(),
+      otp,
+      OtpType.PASSWORD_RESET,
+    )
     if (!isValid) throw new UnauthorizedException('Invalid or expired OTP')
 
     user.password = bcrypt.hashSync(newPassword, 10)

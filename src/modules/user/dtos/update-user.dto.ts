@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger'
 import { IsOptional, IsString } from 'class-validator'
+import { PaginationDTO } from '../../../common/dtos'
 
 export class UpdateProfileDto {
   @ApiPropertyOptional()
@@ -15,19 +16,11 @@ export class UpdateProfileDto {
   @ApiPropertyOptional()
   @IsString()
   @IsOptional()
-  password?: string
-
-  @ApiPropertyOptional()
-  @IsString()
-  @IsOptional()
   fullName?: string
-
-  @ApiPropertyOptional()
-  @IsString()
-  @IsOptional()
-  avatar?: string
 
   @ApiPropertyOptional()
   @IsOptional()
   isActive?: boolean
 }
+
+export class QueryUserDto extends PaginationDTO {}

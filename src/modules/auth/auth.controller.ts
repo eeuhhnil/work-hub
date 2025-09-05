@@ -23,7 +23,7 @@ import { LoginLocalDto } from './dtos/login-local.dto'
 import { AuthUser, Public } from './decorators'
 import type { AuthPayload } from './types'
 import { AuthGuard } from '@nestjs/passport'
-import {VerifyOtpDto, VerifyPasswordResetDto} from '../otp/dtos'
+import { VerifyOtpDto, VerifyPasswordResetDto } from '../otp/dtos'
 import { RequestPasswordResetDto } from './dtos/request-password-reset.dto'
 import { ChangePasswordDto } from './dtos/change-password.dto'
 
