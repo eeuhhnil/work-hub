@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { ValidationPipe } from '@nestjs/common'
 import { ErrorInterceptor, TransformInterceptor } from './common/interceptors'
+import { MicroserviceOptions, Transport } from '@nestjs/microservices'
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule)
@@ -59,6 +60,19 @@ async function bootstrap() {
       },
     },
   })
+
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.RMQ,
+    options: {
+      urls: [config.get<string>('RABBITMQ_URL') as string],
+      queue: config.get<string>('RABBITMQ_QUEUE'),
+      queueOptions: {
+        durable: true,
+      },
+    },
+  })
+
+  await app.startAllMicroservices()
 
   await app.listen(config.get<number>('PORT') ?? 3000)
 

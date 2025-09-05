@@ -23,6 +23,9 @@ import { LoginLocalDto } from './dtos/login-local.dto'
 import { AuthUser, Public } from './decorators'
 import type { AuthPayload } from './types'
 import { AuthGuard } from '@nestjs/passport'
+import { VerifyOtpDto } from '../otp/dtos'
+import { RequestPasswordResetDto } from './dtos/request-password-reset.dto'
+import { ChangePasswordDto } from './dtos/change-password.dto'
 
 @Controller('auth')
 @ApiTags('Auth')
@@ -58,6 +61,15 @@ export class AuthController {
       throw new UnauthorizedException('Google authentication failed')
 
     return req.user
+  }
+
+  @Post('verify-otp')
+  @Public()
+  @ApiOperation({ summary: 'Verify otp' })
+  @ApiOkResponse({ description: 'Verify otp successfully.' })
+  @ApiConflictResponse({ description: 'Internal Server Error.' })
+  async verifyOtp(@Body() verifyOtpDto: VerifyOtpDto) {
+    return this.authService.verifyRegistrationOtp(verifyOtpDto)
   }
 
   @Post('/logout')
@@ -103,5 +115,25 @@ export class AuthController {
   async logoutAll(@AuthUser() payload: AuthPayload) {
     await this.authService.logoutAll(payload.sub)
     return { message: 'Logout successfully' }
+  }
+
+  @Public()
+  @Post('request-password-reset')
+  @ApiOperation({ summary: 'Request password reset OTP' })
+  @ApiOkResponse({ description: 'Password reset OTP sent successfully.' })
+  @ApiConflictResponse({ description: 'Internal Server Error.' })
+  async requestPasswordReset(
+    @Body() requestPasswordResetDto: RequestPasswordResetDto,
+  ) {
+    return this.authService.requestPasswordReset(requestPasswordResetDto)
+  }
+
+  @Public()
+  @Post('change-password')
+  @ApiOperation({ summary: 'Change password with OTP' })
+  @ApiOkResponse({ description: 'Password changed successfully.' })
+  @ApiConflictResponse({ description: 'Internal Server Error.' })
+  async changePassword(@Body() changePasswordDto: ChangePasswordDto) {
+    return this.authService.changePassword(changePasswordDto)
   }
 }

@@ -15,6 +15,11 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
       { email },
       { select: '+password' },
     )
+    if (!user) throw new UnauthorizedException('Invalid credentials')
+    if (!user.isActive)
+      throw new UnauthorizedException(
+        'Account is not activated. Please verify your email.',
+      )
 
     if (user && user.password && bcrypt.compareSync(password, user.password)) {
       const { password, ...safeUser } = user.toJSON()

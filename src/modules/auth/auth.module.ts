@@ -9,6 +9,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config'
 import { SessionModule } from '../session/session.module'
 import { JwtStrategy } from './strategies/jwt.strategy'
 import { GoogleStrategy } from './strategies/google.strategy'
+import { ClientsModule, Transport } from '@nestjs/microservices'
+import { OtpModule } from '../otp/otp.module'
 
 @Module({
   imports: [
@@ -22,10 +24,28 @@ import { GoogleStrategy } from './strategies/google.strategy'
       },
       inject: [ConfigService],
     }),
+    ClientsModule.registerAsync([
+      {
+        name: 'NOTIFICATION_SERVICE',
+        imports: [ConfigModule],
+        inject: [ConfigService],
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [configService.get<string>('RABBITMQ_URL') as string],
+            queue: configService.get<string>('RABBITMQ_QUEUE'),
+            queueOptions: {
+              durable: true,
+            },
+          },
+        }),
+      },
+    ]),
     UserModule,
     SessionModule,
     PassportModule,
     ConfigModule,
+    OtpModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, LocalStrategy, JwtStrategy, GoogleStrategy],

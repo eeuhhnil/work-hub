@@ -1,27 +1,34 @@
 import {
   ConflictException,
+  Inject,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common'
 import { UserService } from '../user/user.service'
 import { RegisterDto } from './dtos/register-local.dto'
 import * as bcrypt from 'bcrypt'
-import { AuthPayload } from './types/auth-payload.type'
 import { JwtService } from '@nestjs/jwt'
 import { ConfigService } from '@nestjs/config'
 import { UserDocument } from '../user/schemas/user.schema'
-import { SystemRole } from '../../common/enums/system-role'
 import { SessionDocument } from '../session/schemas/session.schema'
 import { SessionService } from '../session/session.service'
 import { UAParser } from 'ua-parser-js'
+import { ClientProxy } from '@nestjs/microservices'
+import { OtpService } from '../otp/otp.service'
+import { VerifyOtpDto } from '../otp/dtos'
+import { RequestPasswordResetDto } from './dtos/request-password-reset.dto'
+import { ChangePasswordDto } from './dtos/change-password.dto'
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly userService: UserService,
     private readonly sessionService: SessionService,
+    private readonly otpService: OtpService,
     private readonly jwt: JwtService,
     private readonly configService: ConfigService,
+    @Inject('NOTIFICATION_SERVICE')
+    private readonly notificationClient: ClientProxy,
   ) {}
 
   async registerLocal(registerDto: RegisterDto) {
@@ -29,12 +36,41 @@ export class AuthService {
     const user = await this.userService.checkUserExists({ email })
     if (user) throw new ConflictException('USER_EXISTS')
 
-    return this.userService.create({
+    const newUser = await this.userService.create({
       email,
       username: await this.generateUniqueUsername(fullName),
       password: bcrypt.hashSync(password, 10),
       fullName,
+      isActive: false,
     })
+
+    const otpRecord = await this.otpService.createOtp(newUser._id.toString())
+
+    this.notificationClient.emit('user_registration', {
+      email: newUser.email,
+      fullName: newUser.fullName,
+      otp: otpRecord.code,
+    })
+
+    return {
+      message: 'Registration successful. Please check your email for OTP.',
+    }
+  }
+
+  async verifyRegistrationOtp(verifyOtpDto: VerifyOtpDto) {
+    const { email, otp: code } = verifyOtpDto
+    const user = await this.userService.findOne({ email })
+    if (!user) throw new UnauthorizedException('User not found')
+
+    const isValid = await this.otpService.verifyOtp(user._id.toString(), code)
+    if (!isValid) throw new UnauthorizedException('Invalid or expired OTP')
+
+    // Activate user
+    await this.userService.updateProfile(user._id.toString(), {
+      isActive: true,
+    })
+
+    return { message: 'Account activated successfully' }
   }
 
   async loginLocal(user: UserDocument, req: any) {

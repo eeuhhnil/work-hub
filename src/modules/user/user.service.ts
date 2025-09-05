@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, NotFoundException } from '@nestjs/common'
 import { InjectModel } from '@nestjs/mongoose'
 import { User, UserDocument } from './schemas/user.schema'
 import type { FilterQuery, PaginateModel } from 'mongoose'
+import { UpdateProfileDto } from './dtos'
 
 @Injectable()
 export class UserService {
@@ -24,5 +25,18 @@ export class UserService {
     } = {},
   ) {
     return this.userModel.findOne(filter).select(options.select || {})
+  }
+
+  async updateProfile(userId: string, payload: UpdateProfileDto) {
+    const existingUser = await this.checkUserExists({ _id: userId })
+    if (!existingUser) throw new NotFoundException('User not found')
+
+    return this.userModel.findOneAndUpdate(
+      { _id: userId },
+      {
+        ...payload,
+      },
+      { new: true },
+    )
   }
 }

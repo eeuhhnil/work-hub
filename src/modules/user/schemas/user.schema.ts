@@ -55,6 +55,13 @@ export class User {
     default: SystemRole.USER,
   })
   role?: SystemRole
+
+  @Prop({
+    type: Boolean,
+    required: false,
+    default: false,
+  })
+  isActive?: boolean
 }
 
 export const UserSchema = SchemaFactory.createForClass(User)
