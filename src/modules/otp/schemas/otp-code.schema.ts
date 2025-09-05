@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose'
 import { Document } from 'mongoose'
+import { OtpType } from '../enums'
 
 export type OtpCodeDocument = OtpCode & Document
 
@@ -16,10 +17,10 @@ export class OtpCode {
 
   @Prop({
     type: String,
-    enum: ['REGISTRATION', 'PASSWORD_RESET'],
-    default: 'REGISTRATION',
+    enum: Object.values(OtpType),
+    default: OtpType.REGISTRATION,
   })
-  type: string
+  type: OtpType
 }
 
 export const OtpCodeSchema = SchemaFactory.createForClass(OtpCode)

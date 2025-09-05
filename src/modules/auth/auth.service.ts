@@ -15,9 +15,11 @@ import { SessionService } from '../session/session.service'
 import { UAParser } from 'ua-parser-js'
 import { ClientProxy } from '@nestjs/microservices'
 import { OtpService } from '../otp/otp.service'
+import { OtpType } from '../otp/enums/otp-types.constant'
 import { VerifyOtpDto } from '../otp/dtos'
 import { RequestPasswordResetDto } from './dtos/request-password-reset.dto'
 import { ChangePasswordDto } from './dtos/change-password.dto'
+import { VerifyPasswordResetDto } from '../otp/dtos'
 
 @Injectable()
 export class AuthService {
@@ -62,7 +64,7 @@ export class AuthService {
     const user = await this.userService.findOne({ email })
     if (!user) throw new UnauthorizedException('User not found')
 
-    const isValid = await this.otpService.verifyOtp(user._id.toString(), code)
+    const isValid = await this.otpService.verifyOtp(user._id.toString(), code, OtpType.REGISTRATION)
     if (!isValid) throw new UnauthorizedException('Invalid or expired OTP')
 
     // Activate user
@@ -139,6 +141,64 @@ export class AuthService {
     ])
 
     return { access_token, refresh_token }
+  }
+
+  async requestPasswordReset(requestPasswordResetDto: RequestPasswordResetDto) {
+    const { email } = requestPasswordResetDto
+    const user = await this.userService.findOne({ email })
+    if (!user) throw new UnauthorizedException('User not found')
+
+    const otpRecord = await this.otpService.createOtp(
+      user._id.toString(),
+      OtpType.PASSWORD_RESET,
+    )
+
+    this.notificationClient.emit('password_reset', {
+      email: user.email,
+      fullName: user.fullName,
+      otp: otpRecord.code,
+    })
+
+    return {
+      message:
+        'Password reset OTP sent to your email. Please check your inbox.',
+    }
+  }
+
+  async verifyPasswordReset(dto: VerifyPasswordResetDto) {
+    const { email, otp, newPassword } = dto
+
+    const user = await this.userService.findOne({ email })
+    if (!user) throw new UnauthorizedException('User not found')
+
+    const isValid = await this.otpService.verifyOtp(user._id.toString(), otp, OtpType.PASSWORD_RESET)
+    if (!isValid) throw new UnauthorizedException('Invalid or expired OTP')
+
+    user.password = bcrypt.hashSync(newPassword, 10)
+
+    await user.save()
+
+    return { message: 'Password reset successfully' }
+  }
+
+  async changePassword(userId: string, changePasswordDto: ChangePasswordDto) {
+    const user = await this.userService.findOne(
+      { _id: userId },
+      { select: '+password' },
+    )
+
+    if (!user || !user.password)
+      throw new UnauthorizedException('User not found')
+
+    if (!bcrypt.compareSync(changePasswordDto.currentPassword, user.password)) {
+      throw new UnauthorizedException('Current password is incorrect')
+    }
+
+    user.password = bcrypt.hashSync(changePasswordDto.newPassword, 10)
+
+    await user.save()
+
+    return { message: 'Password changed successfully' }
   }
   private async generateUniqueUsername(fullName: string): Promise<string> {
     let username: string

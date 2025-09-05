@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common'
 import { InjectModel } from '@nestjs/mongoose'
 import { Model } from 'mongoose'
 import { OtpCode, OtpCodeDocument } from './schemas/otp-code.schema'
+import { OtpType } from './enums/otp-types.constant'
 
 @Injectable()
 export class OtpService {
@@ -10,7 +11,7 @@ export class OtpService {
     private readonly otpModel: Model<OtpCodeDocument>,
   ) {}
 
-  async createOtp(userId: string, type = 'REGISTRATION') {
+  async createOtp(userId: string, type: OtpType = OtpType.REGISTRATION) {
     const code = this.generateOtp()
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 minutes
 
@@ -24,7 +25,7 @@ export class OtpService {
     })
   }
 
-  async verifyOtp(userId: string, code: string, type = 'REGISTRATION') {
+  async verifyOtp(userId: string, code: string, type: OtpType) {
     const otp = await this.otpModel.findOne({
       userId,
       code,

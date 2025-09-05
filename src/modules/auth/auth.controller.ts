@@ -23,7 +23,7 @@ import { LoginLocalDto } from './dtos/login-local.dto'
 import { AuthUser, Public } from './decorators'
 import type { AuthPayload } from './types'
 import { AuthGuard } from '@nestjs/passport'
-import { VerifyOtpDto } from '../otp/dtos'
+import {VerifyOtpDto, VerifyPasswordResetDto} from '../otp/dtos'
 import { RequestPasswordResetDto } from './dtos/request-password-reset.dto'
 import { ChangePasswordDto } from './dtos/change-password.dto'
 
@@ -128,12 +128,23 @@ export class AuthController {
     return this.authService.requestPasswordReset(requestPasswordResetDto)
   }
 
+  @Post('verify-otp-password-reset')
   @Public()
+  @ApiOperation({ summary: 'Verify otp' })
+  @ApiOkResponse({ description: 'Verify otp successfully.' })
+  @ApiConflictResponse({ description: 'Internal Server Error.' })
+  async verifyOtpPasswordReset(@Body() dto: VerifyPasswordResetDto) {
+    return this.authService.verifyPasswordReset(dto)
+  }
+
   @Post('change-password')
   @ApiOperation({ summary: 'Change password with OTP' })
   @ApiOkResponse({ description: 'Password changed successfully.' })
   @ApiConflictResponse({ description: 'Internal Server Error.' })
-  async changePassword(@Body() changePasswordDto: ChangePasswordDto) {
-    return this.authService.changePassword(changePasswordDto)
+  async changePassword(
+    @AuthUser() payload: AuthPayload,
+    @Body() changePasswordDto: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(payload.sub, changePasswordDto)
   }
 }
