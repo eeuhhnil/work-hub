@@ -1,14 +1,12 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose'
 import paginate from 'mongoose-paginate-v2'
-import { SystemRole } from '../../../common/enums/system-role'
-import { HydratedDocument } from 'mongoose'
-
-export type UserDocument = HydratedDocument<User>
+import { SystemRole } from '../../enums'
 
 @Schema({
   timestamps: true,
 })
 export class User {
+  _id?: string
   @Prop({
     type: String,
     unique: true,
@@ -59,7 +57,7 @@ export class User {
   @Prop({
     type: Boolean,
     required: false,
-    default: false,
+    default: true,
   })
   isActive?: boolean
 }

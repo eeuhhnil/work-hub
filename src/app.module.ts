@@ -9,6 +9,8 @@ import { NotificationModule } from './modules/notification/notification.module'
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard'
 import { APP_GUARD } from '@nestjs/core'
 import { MailerModule } from '@nestjs-modules/mailer'
+import { DbModule } from './common/db/db.module'
+import { SpaceModule } from './modules/spaces/space.module'
 
 @Module({
   imports: [
@@ -45,11 +47,13 @@ import { MailerModule } from '@nestjs-modules/mailer'
         preview: false,
       }),
     }),
+    DbModule,
     StorageModule,
     UserModule,
     AuthModule,
     OtpModule,
     NotificationModule,
+    SpaceModule,
   ],
   controllers: [],
 

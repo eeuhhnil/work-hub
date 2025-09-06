@@ -1,27 +1,25 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
 import { InjectModel } from '@nestjs/mongoose'
-import { User, UserDocument } from './schemas/user.schema'
 import type { FilterQuery, PaginateModel } from 'mongoose'
 import { UpdateProfileDto } from './dtos'
 import { QueryUserDto } from './dtos'
 import { PaginationMetadata } from '../../common/interceptors'
+import { DbService } from '../../common/db/db.service'
+import { User } from '../../common/db/models'
 
 @Injectable()
 export class UserService {
-  constructor(
-    @InjectModel(User.name)
-    private readonly userModel: PaginateModel<UserDocument>,
-  ) {}
+  constructor(private readonly db: DbService) {}
   async create(user: Omit<User, '_id'>) {
-    return this.userModel.create(user)
+    return this.db.user.create(user)
   }
 
   async getProfile(userId: string) {
-    return this.userModel.findById(userId)
+    return this.db.user.findById(userId)
   }
 
-  async checkUserExists(filter: FilterQuery<UserDocument>) {
-    return this.userModel.exists(filter)
+  async checkUserExists(filter: FilterQuery<User>) {
+    return this.db.user.exists(filter)
   }
 
   async findOne(
@@ -30,12 +28,12 @@ export class UserService {
       select?: string | string[]
     } = {},
   ) {
-    return this.userModel.findOne(filter).select(options.select || {})
+    return this.db.user.findOne(filter).select(options.select || {})
   }
 
   async findMany(
     query: QueryUserDto,
-  ): Promise<{ data: UserDocument[]; meta: PaginationMetadata }> {
+  ): Promise<{ data: User[]; meta: PaginationMetadata }> {
     const { page = 1, limit = 10, search } = query
 
     const where: any = {}
@@ -48,12 +46,12 @@ export class UserService {
 
     // lấy dữ liệu và tổng số
     const [data, total] = await Promise.all([
-      this.userModel
+      this.db.user
         .find(where)
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit),
-      this.userModel.countDocuments(where),
+      this.db.user.countDocuments(where),
     ])
 
     const meta: PaginationMetadata = {
@@ -67,10 +65,10 @@ export class UserService {
   }
 
   async updateProfile(userId: string, payload: UpdateProfileDto) {
-    const existingUser = await this.checkUserExists({ _id: userId })
+    const existingUser = await this.db.user.exists({ _id: userId })
     if (!existingUser) throw new NotFoundException('User not found')
 
-    return this.userModel.findOneAndUpdate(
+    return this.db.user.findOneAndUpdate(
       { _id: userId },
       {
         ...payload,
@@ -80,6 +78,6 @@ export class UserService {
   }
 
   async deleteOne(userId: string) {
-    return this.userModel.deleteOne({ _id: userId })
+    return this.db.user.deleteOne({ _id: userId })
   }
 }

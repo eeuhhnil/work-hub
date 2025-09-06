@@ -9,22 +9,22 @@ import { RegisterDto } from './dtos/register-local.dto'
 import * as bcrypt from 'bcrypt'
 import { JwtService } from '@nestjs/jwt'
 import { ConfigService } from '@nestjs/config'
-import { UserDocument } from '../user/schemas/user.schema'
-import { SessionDocument } from '../session/schemas/session.schema'
 import { SessionService } from '../session/session.service'
 import { UAParser } from 'ua-parser-js'
 import { ClientProxy } from '@nestjs/microservices'
 import { OtpService } from '../otp/otp.service'
-import { OtpType } from '../otp/enums/otp-types.constant'
+import { OtpType } from '../../common/db/models'
 import { VerifyOtpDto } from '../otp/dtos'
 import { RequestPasswordResetDto } from './dtos/request-password-reset.dto'
 import { ChangePasswordDto } from './dtos/change-password.dto'
 import { VerifyPasswordResetDto } from '../otp/dtos'
+import { DbService } from '../../common/db/db.service'
+import { User, Session } from '../../common/db/models'
 
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly userService: UserService,
+    private readonly db: DbService,
     private readonly sessionService: SessionService,
     private readonly otpService: OtpService,
     private readonly jwt: JwtService,
@@ -35,10 +35,10 @@ export class AuthService {
 
   async registerLocal(registerDto: RegisterDto) {
     const { email, password, fullName } = registerDto
-    const user = await this.userService.checkUserExists({ email })
+    const user = await this.db.user.exists({ email })
     if (user) throw new ConflictException('USER_EXISTS')
 
-    const newUser = await this.userService.create({
+    const newUser = await this.db.user.create({
       email,
       username: await this.generateUniqueUsername(fullName),
       password: bcrypt.hashSync(password, 10),
@@ -46,7 +46,7 @@ export class AuthService {
       isActive: false,
     })
 
-    const otpRecord = await this.otpService.createOtp(newUser._id.toString())
+    const otpRecord = await this.otpService.createOtp(newUser._id!.toString())
 
     this.notificationClient.emit('user_registration', {
       email: newUser.email,
@@ -61,30 +61,32 @@ export class AuthService {
 
   async verifyRegistrationOtp(verifyOtpDto: VerifyOtpDto) {
     const { email, otp: code } = verifyOtpDto
-    const user = await this.userService.findOne({ email })
+    const user = await this.db.user.findOne({ email })
     if (!user) throw new UnauthorizedException('User not found')
 
     const isValid = await this.otpService.verifyOtp(
-      user._id.toString(),
+      user._id!.toString(),
       code,
       OtpType.REGISTRATION,
     )
     if (!isValid) throw new UnauthorizedException('Invalid or expired OTP')
 
     // Activate user
-    await this.userService.updateProfile(user._id.toString(), {
-      isActive: true,
-    })
+    await this.db.user.findOneAndUpdate(
+      { _id: user._id! },
+      { isActive: true },
+      { new: true },
+    )
 
     return { message: 'Account activated successfully' }
   }
 
-  async loginLocal(user: UserDocument, req: any) {
+  async loginLocal(user: User, req: any) {
     const clientInfo = this.getLoginInfo(req)
 
     const session = await this.sessionService.create({
       ...clientInfo,
-      userId: user._id.toString(),
+      userId: user._id!.toString(),
     })
 
     return this.generateToken(user, session)
@@ -119,12 +121,12 @@ export class AuthService {
     await this.sessionService.deleteMany({ userId: userId })
   }
 
-  async generateToken(user: UserDocument, session: SessionDocument) {
+  async generateToken(user: User, session: Session) {
     const [access_token, refresh_token] = await Promise.all([
       this.jwt.signAsync(
         {
-          jti: session._id.toString(),
-          sub: user._id.toString(),
+          jti: session._id!.toString(),
+          sub: user._id!.toString(),
           email: user.email,
           role: user.role,
         },
@@ -134,8 +136,8 @@ export class AuthService {
       ),
       this.jwt.signAsync(
         {
-          sub: user._id.toString(),
-          jti: session._id.toString(),
+          sub: user._id!.toString(),
+          jti: session._id!.toString(),
         },
         {
           secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
@@ -149,11 +151,11 @@ export class AuthService {
 
   async requestPasswordReset(requestPasswordResetDto: RequestPasswordResetDto) {
     const { email } = requestPasswordResetDto
-    const user = await this.userService.findOne({ email })
+    const user = await this.db.user.findOne({ email })
     if (!user) throw new UnauthorizedException('User not found')
 
     const otpRecord = await this.otpService.createOtp(
-      user._id.toString(),
+      user._id!.toString(),
       OtpType.PASSWORD_RESET,
     )
 
@@ -172,28 +174,27 @@ export class AuthService {
   async verifyPasswordReset(dto: VerifyPasswordResetDto) {
     const { email, otp, newPassword } = dto
 
-    const user = await this.userService.findOne({ email })
+    const user = await this.db.user.findOne({ email })
     if (!user) throw new UnauthorizedException('User not found')
 
     const isValid = await this.otpService.verifyOtp(
-      user._id.toString(),
+      user._id!.toString(),
       otp,
       OtpType.PASSWORD_RESET,
     )
     if (!isValid) throw new UnauthorizedException('Invalid or expired OTP')
 
-    user.password = bcrypt.hashSync(newPassword, 10)
-
-    await user.save()
+    await this.db.user.findOneAndUpdate(
+      { _id: user._id! },
+      { password: bcrypt.hashSync(newPassword, 10) },
+      { new: true },
+    )
 
     return { message: 'Password reset successfully' }
   }
 
   async changePassword(userId: string, changePasswordDto: ChangePasswordDto) {
-    const user = await this.userService.findOne(
-      { _id: userId },
-      { select: '+password' },
-    )
+    const user = await this.db.user.findOne({ _id: userId }).select('+password')
 
     if (!user || !user.password)
       throw new UnauthorizedException('User not found')
@@ -202,9 +203,11 @@ export class AuthService {
       throw new UnauthorizedException('Current password is incorrect')
     }
 
-    user.password = bcrypt.hashSync(changePasswordDto.newPassword, 10)
-
-    await user.save()
+    await this.db.user.findOneAndUpdate(
+      { _id: userId },
+      { password: bcrypt.hashSync(changePasswordDto.newPassword, 10) },
+      { new: true },
+    )
 
     return { message: 'Password changed successfully' }
   }
@@ -212,7 +215,7 @@ export class AuthService {
     let username: string
     while (true) {
       username = await this.generateRandomName(fullName)
-      const existingUser = await this.userService.checkUserExists({ username })
+      const existingUser = await this.db.user.exists({ username })
       if (!existingUser) break
     }
 
@@ -279,10 +282,10 @@ export class AuthService {
     },
     req: any,
   ) {
-    let user = await this.userService.findOne({ email: payload.email })
+    let user = await this.db.user.findOne({ email: payload.email })
 
     if (!user) {
-      user = await this.userService.create({
+      user = await this.db.user.create({
         email: payload.email,
         fullName: payload.fullName,
         avatar: payload.avatar,
@@ -290,15 +293,19 @@ export class AuthService {
         username: await this.generateUniqueUsername(payload.fullName),
       })
     } else if (!user.googleId) {
+      await this.db.user.findOneAndUpdate(
+        { _id: user._id! },
+        { googleId: payload.googleId },
+        { new: true },
+      )
       user.googleId = payload.googleId
-      await user.save()
     }
 
     const clientInfo = this.getLoginInfo(req)
 
     const session = await this.sessionService.create({
       ...clientInfo,
-      userId: user._id.toString(),
+      userId: user._id!.toString(),
     })
 
     return this.generateToken(user, session)
