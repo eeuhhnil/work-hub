@@ -30,12 +30,7 @@ export class SpaceMemberController {
     const { spaceId, userId } = payload
     await this.spaceMember.checkOwnership(spaceId, authPayload.sub)
 
-    const spaceMember = await this.spaceMember.createOne(spaceId, userId)
-
-    return {
-      message: `Added member to space`,
-      data: spaceMember.toJSON(),
-    }
+    return await this.spaceMember.createOne(spaceId, userId)
   }
 
   @Get('/space/:spaceId')
@@ -47,13 +42,7 @@ export class SpaceMemberController {
   ) {
     await this.spaceMember.checkMembership(spaceId, authPayload.sub)
 
-    const pagination = await this.spaceMember.findManyBySpaceId(spaceId, query)
-
-    return {
-      message: 'Find many space members successfully',
-      data: pagination.docs.map((doc) => doc.toJSON()),
-      _pagination: pagination,
-    }
+    return await this.spaceMember.findManyBySpaceId(spaceId, query)
   }
 
   @Delete(':spaceMemberId')
@@ -74,9 +63,6 @@ export class SpaceMemberController {
     if (ownership.user.toString() === spaceMember.user.toString())
       throw new ForbiddenException('Owner cannot be removed from space')
 
-    return {
-      message: `Removed member from space`,
-      data: await this.spaceMember.deleteOne(spaceMemberId),
-    }
+    return await this.spaceMember.deleteOne(spaceMemberId)
   }
 }

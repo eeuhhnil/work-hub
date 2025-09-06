@@ -1,7 +1,15 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common'
 import { InjectModel } from '@nestjs/mongoose'
 import type { PaginateModel } from 'mongoose'
-import { Space, SpaceMember, User, Session, OtpCode } from './models'
+import {
+  Space,
+  SpaceMember,
+  User,
+  Session,
+  OtpCode,
+  Project,
+  ProjectMember,
+} from './models'
 
 @Injectable()
 export class DbService implements OnApplicationBootstrap {
@@ -10,6 +18,8 @@ export class DbService implements OnApplicationBootstrap {
   user: PaginateModel<User>
   space: PaginateModel<Space>
   spaceMember: PaginateModel<SpaceMember>
+  project: PaginateModel<Project>
+  projectMember: PaginateModel<ProjectMember>
   session: PaginateModel<Session>
   otpCode: PaginateModel<OtpCode>
 
@@ -18,12 +28,17 @@ export class DbService implements OnApplicationBootstrap {
     @InjectModel(Space.name) private spaceModel: PaginateModel<Space>,
     @InjectModel(SpaceMember.name)
     private spaceMemberModel: PaginateModel<SpaceMember>,
+    @InjectModel(Project.name) private projectModel: PaginateModel<Project>,
+    @InjectModel(ProjectMember.name)
+    private projectMemberModel: PaginateModel<ProjectMember>,
     @InjectModel(Session.name) private sessionModel: PaginateModel<Session>,
     @InjectModel(OtpCode.name) private otpCodeModel: PaginateModel<OtpCode>,
   ) {
     this.user = userModel
     this.space = spaceModel
     this.spaceMember = spaceMemberModel
+    this.project = projectModel
+    this.projectMember = projectMemberModel
     this.session = sessionModel
     this.otpCode = otpCodeModel
   }

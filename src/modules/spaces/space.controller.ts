@@ -14,7 +14,7 @@ import { SpaceService } from './space.service'
 import { SpaceMemberService } from './space-member.service'
 import { AuthUser } from '../auth/decorators'
 import type { AuthPayload } from '../auth/types'
-import { CreateSpaceDto, UpdateSpaceDto } from './dtos'
+import { CreateSpaceDto, QuerySpacesDto, UpdateSpaceDto } from './dtos'
 
 @Controller('spaces')
 @ApiTags('Spaces')
@@ -31,29 +31,8 @@ export class SpaceController {
     @AuthUser() authPayload: AuthPayload,
     @Body() payload: CreateSpaceDto,
   ) {
-    const space = await this.space.createOne(authPayload.sub, payload)
-
-    return {
-      message: `Created a new space`,
-      data: space.toJSON(),
-    }
+    return await this.space.createOne(authPayload.sub, payload)
   }
-
-  // @Get()
-  // @ApiOperation({ summary: "Get many spaces" })
-  // async findMany(
-  //   @AuthUser() authPayload: AuthPayload,
-  //   @Query() query: QuerySpacesDto,
-  //   @Pagination() paginationDto: PaginationDto,
-  // ) {
-  //   const pagination = await this.space.findMany(authPayload.sub, query, paginationDto)
-  //
-  //   return {
-  //     message: `Find many spaces successfully`,
-  //     data: pagination.docs.map((doc) => doc.toJSON()),
-  //     _pagination: pagination,
-  //   }
-  // }
 
   @Get(':spaceId')
   @ApiOperation({ summary: 'Find one space' })
@@ -66,11 +45,7 @@ export class SpaceController {
     const space = await this.space.findOne(spaceId)
     if (!space)
       throw new NotFoundException(`Space with id ${spaceId} not found`)
-
-    return {
-      message: `Get one space successfully`,
-      data: space.toJSON(),
-    }
+    return space
   }
 
   @Put(':spaceId')
@@ -82,12 +57,7 @@ export class SpaceController {
   ) {
     await this.spaceMember.checkOwnership(spaceId, authPayload.sub)
 
-    const updatedSpace = await this.space.updateOne(spaceId, payload)
-
-    return {
-      message: `Updated a new space`,
-      data: updatedSpace ? updatedSpace.toJSON() : null,
-    }
+    return await this.space.updateOne(spaceId, payload)
   }
 
   @Delete(':spaceId')
@@ -98,9 +68,6 @@ export class SpaceController {
   ) {
     await this.spaceMember.checkOwnership(spaceId, authPayload.sub)
 
-    return {
-      message: `Deleted a space`,
-      data: await this.space.deleteOne(spaceId),
-    }
+    return await this.space.deleteOne(spaceId)
   }
 }

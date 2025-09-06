@@ -12,6 +12,10 @@ import {
   SessionSchema,
   OtpCode,
   OtpCodeSchema,
+  Project,
+  ProjectSchema,
+  ProjectMember,
+  ProjectMemberSchema,
 } from './models'
 import { ConfigModule, ConfigService } from '@nestjs/config'
 
@@ -41,6 +45,14 @@ import { ConfigModule, ConfigService } from '@nestjs/config'
       {
         name: SpaceMember.name,
         schema: SpaceMemberSchema,
+      },
+      {
+        name: Project.name,
+        schema: ProjectSchema,
+      },
+      {
+        name: ProjectMember.name,
+        schema: ProjectMemberSchema,
       },
       {
         name: Session.name,
