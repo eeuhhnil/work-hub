@@ -11,15 +11,19 @@ import { SpaceRole } from '../../common/enums'
 import { SpaceMember } from '../../common/db/models'
 import { PaginationDTO } from '../../common/dtos'
 import { QuerySpacesDto } from './dtos'
+import { NotificationService } from '../notification/notification.service'
 
 @Injectable()
 export class SpaceMemberService {
-  constructor(private readonly db: DbService) {}
+  constructor(
+    private readonly db: DbService,
+    private readonly notificationService: NotificationService,
+  ) {}
 
   async createOne(
     spaceId: IdLike<string>,
     memberId: IdLike<string>,
-    role?: SpaceRole,
+    ownerId: string,
   ) {
     const [space, member, existing] = await Promise.all([
       this.db.space.exists({ _id: spaceId }),
@@ -30,11 +34,18 @@ export class SpaceMemberService {
     if (!member) throw new NotFoundException('Member not found')
     if (existing) throw new ConflictException('User already space member')
 
-    return this.db.spaceMember.create({
+    const newMember = await this.db.spaceMember.create({
       user: memberId,
       space: spaceId,
-      role: role ? role : SpaceRole.MEMBER,
+      role: SpaceRole.MEMBER,
     })
+
+    await this.notificationService.notifyMemberAddedToSpace(
+      spaceId.toString(),
+      memberId.toString(),
+      ownerId.toString(),
+    )
+    return newMember
   }
 
   async findOne(spaceMemberId: IdLike<string>) {
@@ -62,7 +73,17 @@ export class SpaceMemberService {
     return this.db.spaceMember.paginate(filter, options)
   }
 
-  async deleteOne(spaceMemberId: IdLike<string>) {
+  async deleteOne(spaceMemberId: IdLike<string>, actorId: string) {
+    const spaceMember = await this.db.spaceMember.findById(spaceMemberId)
+    if (!spaceMember) throw new NotFoundException('Space member not found')
+
+    // Send notification before deletion if actor is provided
+    await this.notificationService.notifyMemberRemovedFromSpace(
+      spaceMember.space.toString(),
+      spaceMember.user.toString(),
+      actorId.toString(),
+    )
+
     return this.db.spaceMember.deleteOne({ _id: spaceMemberId })
   }
 

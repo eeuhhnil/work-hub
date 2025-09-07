@@ -30,7 +30,7 @@ export class SpaceMemberController {
     const { spaceId, userId } = payload
     await this.spaceMember.checkOwnership(spaceId, authPayload.sub)
 
-    return await this.spaceMember.createOne(spaceId, userId)
+    return await this.spaceMember.createOne(spaceId, userId, authPayload.sub)
   }
 
   @Get('/space/:spaceId')
@@ -63,6 +63,6 @@ export class SpaceMemberController {
     if (ownership.user.toString() === spaceMember.user.toString())
       throw new ForbiddenException('Owner cannot be removed from space')
 
-    return await this.spaceMember.deleteOne(spaceMemberId)
+    return await this.spaceMember.deleteOne(spaceMemberId, authPayload.sub)
   }
 }

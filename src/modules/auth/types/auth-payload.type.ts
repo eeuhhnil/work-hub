@@ -1,4 +1,4 @@
-import { SystemRole } from '../../../common/enums/system-role'
+import { SystemRole } from '../../../common/enums'
 
 export type AuthPayload = {
   jti: string

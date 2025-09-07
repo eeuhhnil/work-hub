@@ -9,12 +9,20 @@ import {
 } from './dtos/dtos'
 import { ProjectRole } from '../../common/enums'
 import { Project } from '../../common/db/models'
+import { NotificationService } from '../notification/notification.service'
+import {PaginationMetadata} from "../../common/interceptors";
 
 @Injectable()
 export class ProjectService {
-  constructor(private readonly db: DbService) {}
+  constructor(
+    private readonly db: DbService,
+    private readonly notificationService: NotificationService,
+  ) {}
 
-  async createOne(ownerId: IdLike<string>, payload: CreateProjectDto) {
+  async createOne(
+    ownerId: IdLike<string>,
+    payload: CreateProjectDto,
+  ) {
     const project = await this.db.project.create(payload)
 
     await this.db.projectMember.create({
@@ -23,56 +31,86 @@ export class ProjectService {
       role: ProjectRole.OWNER,
     })
 
+      await this.notificationService.notifyCreateProject(
+        ownerId.toString(),
+        project)
+
+
     return project
   }
 
-  async findMany(userId: IdLike<string>, query: QueryProjectDto) {
-    const filter: FilterQuery<Project> = { user: userId }
+  async findMany(query: QueryProjectDto): Promise<{ data: Project[]; meta: PaginationMetadata }> {
+    const filter: FilterQuery<Project> = {}
+    const { page = 1, limit = 10, search } = query
 
-    const projectMembers = await this.db.projectMember.find({ user: userId })
-    const projectIds = projectMembers.map((pm) => pm.project)
-    filter._id = { $in: projectIds }
-
-    if (query.name) {
-      filter.name = { $regex: query.name, $options: 'i' }
+    const where: any = {}
+    if (search) {
+      where.$or = [
+        { name: { $regex: search, $options: 'i' } },
+      ]
     }
 
-    if (query.role) {
-      const membersByRole = await this.db.projectMember.find({
-        user: userId,
-        role: query.role,
-      })
-      const idsByRole = membersByRole.map((pm) => pm.project)
-      filter._id = { $in: idsByRole }
-    }
+    // lấy dữ liệu và tổng số
+    const [data, total] = await Promise.all([
+      this.db.project
+        .find(where)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit),
+      this.db.project.countDocuments(where),
+    ])
 
-    const { page = 1, limit = 10 } = query
-    const sort = query.getSortObject()
-
-    const options: PaginateOptions = {
+    const meta: PaginationMetadata = {
       page,
       limit,
-      sort,
+      total,
+      totalPages: Math.ceil(total / limit),
     }
 
-    return this.db.project.paginate(filter, options)
+    return { data, meta }
+
   }
 
   async findOne(projectId: IdLike<string>) {
     return this.db.project.findById(projectId)
   }
 
-  async updateOne(projectId: IdLike<string>, payload: UpdateProjectDto) {
-    return this.db.project.findOneAndUpdate(
+  async updateOne(
+    projectId: IdLike<string>,
+    payload: UpdateProjectDto,
+    actorId: string,
+  ) {
+    const updated = await this.db.project.findOneAndUpdate(
       { _id: projectId },
       {
         ...payload,
       },
       { new: true },
     )
+
+    // Send notification if actor is provided
+    if (updated) {
+      await this.notificationService.notifyUpdatedProject(
+        projectId.toString(),
+        actorId,
+      )
+    }
+
+    return updated
   }
 
-  async deleteOne(projectId: IdLike<string>) {
+  async deleteOne(projectId: IdLike<string>, actor: any) {
+    const project = await this.db.project.findById(projectId)
+    if (!project)
+      throw new NotFoundException(`Project with id ${projectId} not found`)
+
+    // Send notification before deletion if actor is provided
+      await this.notificationService.notifyDeletedProject(
+        projectId.toString(),
+        actor,
+        project.name,
+      )
+
     return this.db.project.deleteOne({ _id: projectId })
   }
 

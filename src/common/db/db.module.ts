@@ -16,6 +16,10 @@ import {
   ProjectSchema,
   ProjectMember,
   ProjectMemberSchema,
+  Notification,
+  NotificationSchema,
+  Task,
+  TaskSchema,
 } from './models'
 import { ConfigModule, ConfigService } from '@nestjs/config'
 
@@ -55,12 +59,20 @@ import { ConfigModule, ConfigService } from '@nestjs/config'
         schema: ProjectMemberSchema,
       },
       {
+        name: Task.name,
+        schema: TaskSchema,
+      },
+      {
         name: Session.name,
         schema: SessionSchema,
       },
       {
         name: OtpCode.name,
         schema: OtpCodeSchema,
+      },
+      {
+        name: Notification.name,
+        schema: NotificationSchema,
       },
     ]),
   ],

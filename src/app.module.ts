@@ -11,6 +11,8 @@ import { APP_GUARD } from '@nestjs/core'
 import { MailerModule } from '@nestjs-modules/mailer'
 import { DbModule } from './common/db/db.module'
 import { SpaceModule } from './modules/spaces/space.module'
+import { ProjectModule } from './modules/project/project.module'
+import { TaskModule } from './modules/task/task.module'
 
 @Module({
   imports: [
@@ -28,6 +30,7 @@ import { SpaceModule } from './modules/spaces/space.module'
       },
       inject: [ConfigService],
     }),
+
     MailerModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -54,6 +57,8 @@ import { SpaceModule } from './modules/spaces/space.module'
     OtpModule,
     NotificationModule,
     SpaceModule,
+    ProjectModule,
+    TaskModule,
   ],
   controllers: [],
 

@@ -1,9 +1,14 @@
-import { PartialType } from '@nestjs/swagger'
-import { CreateProjectDto } from './create-project.dto'
 import { IsOptional, IsString } from 'class-validator'
+import {ApiPropertyOptional} from "@nestjs/swagger";
 
-export class UpdateProjectDto extends PartialType(CreateProjectDto) {
+export class UpdateProjectDto  {
+  @ApiPropertyOptional()
   @IsString()
   @IsOptional()
-  avatar?: string
+  name?: string
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  description?: string
 }

@@ -62,7 +62,7 @@ export class ProjectController {
     @AuthUser() authPayload: AuthPayload,
     @Query() query: QueryProjectDto,
   ) {
-    return await this.project.findMany(authPayload.sub, query)
+    return await this.project.findMany(query)
   }
 
   @Get(':projectId')
@@ -86,9 +86,6 @@ export class ProjectController {
     schema: {
       type: 'object',
       properties: {
-        space: {
-          type: 'string',
-        },
         name: {
           type: 'string',
         },
@@ -137,7 +134,7 @@ export class ProjectController {
     }
     payload['avatar'] = avatar
 
-    return await this.project.updateOne(projectId, payload)
+    return await this.project.updateOne(projectId, payload, authPayload.sub)
   }
 
   @Delete(':projectId')
@@ -148,6 +145,6 @@ export class ProjectController {
   ) {
     await this.projectMember.checkOwnership(projectId, authPayload.sub)
 
-    return await this.project.deleteOne(projectId)
+    return await this.project.deleteOne(projectId, authPayload.sub)
   }
 }

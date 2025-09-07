@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsMongoId, IsNotEmpty, IsOptional, IsString } from 'class-validator'
+import {PaginationDTO} from "../../../../common/dtos";
 
 export class CreateProjectDto {
   @ApiProperty()
@@ -17,3 +18,7 @@ export class CreateProjectDto {
   @IsOptional()
   description?: string
 }
+
+export class QueryProjectDto extends PaginationDTO {
+}
+

@@ -9,6 +9,8 @@ import {
   OtpCode,
   Project,
   ProjectMember,
+  Task,
+  Notification,
 } from './models'
 
 @Injectable()
@@ -20,8 +22,10 @@ export class DbService implements OnApplicationBootstrap {
   spaceMember: PaginateModel<SpaceMember>
   project: PaginateModel<Project>
   projectMember: PaginateModel<ProjectMember>
+  task: PaginateModel<Task>
   session: PaginateModel<Session>
   otpCode: PaginateModel<OtpCode>
+  notification: PaginateModel<Notification>
 
   constructor(
     @InjectModel(User.name) private userModel: PaginateModel<User>,
@@ -31,16 +35,21 @@ export class DbService implements OnApplicationBootstrap {
     @InjectModel(Project.name) private projectModel: PaginateModel<Project>,
     @InjectModel(ProjectMember.name)
     private projectMemberModel: PaginateModel<ProjectMember>,
+    @InjectModel(Task.name) private taskModel: PaginateModel<Task>,
     @InjectModel(Session.name) private sessionModel: PaginateModel<Session>,
     @InjectModel(OtpCode.name) private otpCodeModel: PaginateModel<OtpCode>,
+    @InjectModel(Notification.name)
+    private notificationModel: PaginateModel<Notification>,
   ) {
     this.user = userModel
     this.space = spaceModel
     this.spaceMember = spaceMemberModel
     this.project = projectModel
     this.projectMember = projectMemberModel
+    this.task = taskModel
     this.session = sessionModel
     this.otpCode = otpCodeModel
+    this.notification = notificationModel
   }
 
   onApplicationBootstrap(): any {

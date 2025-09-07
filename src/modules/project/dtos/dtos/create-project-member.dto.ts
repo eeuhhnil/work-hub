@@ -13,7 +13,7 @@ export class CreateProjectMemberDto {
   @IsNotEmpty()
   user: string
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ enum: ProjectRole })
   @IsEnum(ProjectRole)
   @IsOptional()
   role?: ProjectRole

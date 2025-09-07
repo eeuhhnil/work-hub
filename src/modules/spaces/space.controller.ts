@@ -57,7 +57,7 @@ export class SpaceController {
   ) {
     await this.spaceMember.checkOwnership(spaceId, authPayload.sub)
 
-    return await this.space.updateOne(spaceId, payload)
+    return await this.space.updateOne(spaceId, payload, authPayload.sub)
   }
 
   @Delete(':spaceId')
@@ -68,6 +68,6 @@ export class SpaceController {
   ) {
     await this.spaceMember.checkOwnership(spaceId, authPayload.sub)
 
-    return await this.space.deleteOne(spaceId)
+    return await this.space.deleteOne(spaceId, authPayload.sub)
   }
 }

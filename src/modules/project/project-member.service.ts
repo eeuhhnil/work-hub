@@ -5,10 +5,14 @@ import { QueryProjectMemberDto } from './dtos/dtos'
 import { IdLike } from '../../common/types'
 import { ProjectMember } from '../../common/db/models'
 import { ProjectRole } from '../../common/enums'
+import { NotificationService } from '../notification/notification.service'
 
 @Injectable()
 export class ProjectMemberService {
-  constructor(private readonly db: DbService) {}
+  constructor(
+    private readonly db: DbService,
+    private readonly notificationService: NotificationService,
+  ) {}
 
   async findOne(projectMemberId: IdLike<string>) {
     return this.db.projectMember.findOne({ _id: projectMemberId })
@@ -32,11 +36,31 @@ export class ProjectMemberService {
     return this.db.projectMember.paginate(filter, options)
   }
 
-  async addMemberToProject(payload: Omit<ProjectMember, '_id'>) {
-    return this.db.projectMember.create(payload)
+  async addMemberToProject(payload: Omit<ProjectMember, '_id'>, actor?: any) {
+    const newMember = await this.db.projectMember.create(payload)
+
+    // Send notification if actor is provided
+      await this.notificationService.notifyMemberAddedToProject(
+        payload.project.toString(),
+        payload.user.toString(),
+        actor,
+      )
+
+    return newMember
   }
 
-  async deleteOne(projectMemberId: IdLike<string>) {
+  async deleteOne(projectMemberId: IdLike<string>, actor?: any) {
+    const projectMember = await this.db.projectMember.findById(projectMemberId)
+    if (!projectMember) return null
+
+    // Send notification before deletion if actor is provided
+      await this.notificationService.notifyMemberRemovedFromProject(
+        projectMember.project.toString(),
+        projectMember.user.toString(),
+        actor,
+      )
+
+
     return this.db.projectMember.deleteOne({ _id: projectMemberId })
   }
 

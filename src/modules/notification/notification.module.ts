@@ -1,7 +1,10 @@
-import { Module } from '@nestjs/common'
+import { Module, forwardRef } from '@nestjs/common'
 import { NotificationController } from './notification.controller'
 import { MailerModule } from '@nestjs-modules/mailer'
 import { ConfigModule, ConfigService } from '@nestjs/config'
+import { NotificationGateway } from './notification.gateway'
+import { JwtModule } from '@nestjs/jwt'
+import { NotificationService } from './notification.service'
 
 @Module({
   imports: [
@@ -23,7 +26,19 @@ import { ConfigModule, ConfigService } from '@nestjs/config'
         },
       }),
     }),
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory(config: ConfigService) {
+        return {
+          secret: config.get('JWT_SECRET'),
+          signOptions: { expiresIn: '1d' },
+        }
+      },
+      inject: [ConfigService],
+    }),
   ],
   controllers: [NotificationController],
+  providers: [NotificationGateway, NotificationService],
+  exports: [NotificationService, NotificationGateway],
 })
 export class NotificationModule {}
