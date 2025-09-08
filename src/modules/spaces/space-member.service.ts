@@ -77,7 +77,6 @@ export class SpaceMemberService {
     const spaceMember = await this.db.spaceMember.findById(spaceMemberId)
     if (!spaceMember) throw new NotFoundException('Space member not found')
 
-    // Send notification before deletion if actor is provided
     await this.notificationService.notifyMemberRemovedFromSpace(
       spaceMember.space.toString(),
       spaceMember.user.toString(),

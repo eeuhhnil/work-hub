@@ -40,11 +40,11 @@ export class ProjectMemberService {
     const newMember = await this.db.projectMember.create(payload)
 
     // Send notification if actor is provided
-      await this.notificationService.notifyMemberAddedToProject(
-        payload.project.toString(),
-        payload.user.toString(),
-        actor,
-      )
+    await this.notificationService.notifyMemberAddedToProject(
+      payload.project.toString(),
+      payload.user.toString(),
+      actor,
+    )
 
     return newMember
   }
@@ -54,12 +54,11 @@ export class ProjectMemberService {
     if (!projectMember) return null
 
     // Send notification before deletion if actor is provided
-      await this.notificationService.notifyMemberRemovedFromProject(
-        projectMember.project.toString(),
-        projectMember.user.toString(),
-        actor,
-      )
-
+    await this.notificationService.notifyMemberRemovedFromProject(
+      projectMember.project.toString(),
+      projectMember.user.toString(),
+      actor,
+    )
 
     return this.db.projectMember.deleteOne({ _id: projectMemberId })
   }

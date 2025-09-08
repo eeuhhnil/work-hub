@@ -54,6 +54,7 @@ export class ProjectMemberController {
   }
 
   @Delete(':projectMemberId')
+  @ApiOperation({ summary: 'Remove member from project' })
   async removeMemberFromProject(
     @AuthUser() authPayload: AuthPayload,
     @Param('projectMemberId') projectMemberId: string,

@@ -50,6 +50,7 @@ export class UserController {
   }
 
   @Get()
+  @ApiOperation({ summary: 'Get all users with pagination and search' })
   async findMany(@Query() query: QueryUserDto) {
     return this.userService.findMany(query)
   }

@@ -8,13 +8,14 @@ import {
   Param,
   Post,
   Put,
+  Query,
 } from '@nestjs/common'
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { TaskService } from './task.service'
 import { SpaceMemberService } from '../spaces/space-member.service'
 import { ProjectMemberService } from '../project/project-member.service'
 import type { AuthPayload } from '../auth/types'
-import { CreateTaskDto, UpdateTaskDto } from './dtos'
+import { CreateTaskDto, QueryTaskDto, UpdateTaskDto } from './dtos'
 import { AuthUser } from '../auth/decorators'
 import { ProjectRole, SpaceRole, TaskStatus } from '../../common/enums'
 
@@ -27,6 +28,15 @@ export class TaskController {
     private readonly spaceMember: SpaceMemberService,
     private readonly projectMember: ProjectMemberService,
   ) {}
+
+  @Get()
+  @ApiOperation({ summary: 'Get tasks with pagination and filtering' })
+  async findMany(
+    @AuthUser() authPayload: AuthPayload,
+    @Query() query: QueryTaskDto,
+  ) {
+    return await this.taskService.findMany(authPayload.sub, query)
+  }
 
   @Post()
   @ApiOperation({ summary: 'Create a task' })

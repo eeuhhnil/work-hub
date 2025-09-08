@@ -1,7 +1,7 @@
 import { IsOptional, IsString } from 'class-validator'
-import {ApiPropertyOptional} from "@nestjs/swagger";
+import { ApiPropertyOptional } from '@nestjs/swagger'
 
-export class UpdateProjectDto  {
+export class UpdateProjectDto {
   @ApiPropertyOptional()
   @IsString()
   @IsOptional()

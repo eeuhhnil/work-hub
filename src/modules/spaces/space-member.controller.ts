@@ -46,6 +46,7 @@ export class SpaceMemberController {
   }
 
   @Delete(':spaceMemberId')
+  @ApiOperation({ summary: 'Remove member from space' })
   async removeMemberFromSpace(
     @AuthUser() authPayload: AuthPayload,
     @Param('spaceMemberId') spaceMemberId: string,

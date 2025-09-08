@@ -10,7 +10,7 @@ import {
 import { ProjectRole } from '../../common/enums'
 import { Project } from '../../common/db/models'
 import { NotificationService } from '../notification/notification.service'
-import {PaginationMetadata} from "../../common/interceptors";
+import { PaginationMetadata } from '../../common/interceptors'
 
 @Injectable()
 export class ProjectService {
@@ -19,10 +19,7 @@ export class ProjectService {
     private readonly notificationService: NotificationService,
   ) {}
 
-  async createOne(
-    ownerId: IdLike<string>,
-    payload: CreateProjectDto,
-  ) {
+  async createOne(ownerId: IdLike<string>, payload: CreateProjectDto) {
     const project = await this.db.project.create(payload)
 
     await this.db.projectMember.create({
@@ -31,23 +28,23 @@ export class ProjectService {
       role: ProjectRole.OWNER,
     })
 
-      await this.notificationService.notifyCreateProject(
-        ownerId.toString(),
-        project)
-
+    await this.notificationService.notifyCreateProject(
+      ownerId.toString(),
+      project,
+    )
 
     return project
   }
 
-  async findMany(query: QueryProjectDto): Promise<{ data: Project[]; meta: PaginationMetadata }> {
+  async findMany(
+    query: QueryProjectDto,
+  ): Promise<{ data: Project[]; meta: PaginationMetadata }> {
     const filter: FilterQuery<Project> = {}
     const { page = 1, limit = 10, search } = query
 
     const where: any = {}
     if (search) {
-      where.$or = [
-        { name: { $regex: search, $options: 'i' } },
-      ]
+      where.$or = [{ name: { $regex: search, $options: 'i' } }]
     }
 
     // lấy dữ liệu và tổng số
@@ -68,7 +65,6 @@ export class ProjectService {
     }
 
     return { data, meta }
-
   }
 
   async findOne(projectId: IdLike<string>) {
@@ -105,11 +101,11 @@ export class ProjectService {
       throw new NotFoundException(`Project with id ${projectId} not found`)
 
     // Send notification before deletion if actor is provided
-      await this.notificationService.notifyDeletedProject(
-        projectId.toString(),
-        actor,
-        project.name,
-      )
+    await this.notificationService.notifyDeletedProject(
+      projectId.toString(),
+      actor,
+      project.name,
+    )
 
     return this.db.project.deleteOne({ _id: projectId })
   }
