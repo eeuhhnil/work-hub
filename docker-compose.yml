@@ -1,0 +1,37 @@
+networks:
+  work_hub:
+    name: work_hub
+    driver: bridge
+
+services:
+  work_hub_mongo:
+    image: mongo:latest
+    container_name: work_hub_mongo
+    restart: always
+    ports:
+      - "27018:27017"
+    volumes:
+      - work_hub_mongo:/data
+    networks:
+      - work_hub
+
+  work_hub_api:
+    build: .
+    image: work_hub_api:v0.0.1
+    container_name: work_hub_api
+    restart: always
+    env_file:
+      - ./.env
+    environment:
+      - MONGO_URI=mongodb://work_hub_mongo:27018/work_hub
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+    ports:
+      - "3001:3001"
+    networks:
+      - work_hub
+    depends_on:
+      - work_hub_mongo
+
+volumes:
+  work_hub_mongo:
