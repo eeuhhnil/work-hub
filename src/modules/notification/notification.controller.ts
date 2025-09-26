@@ -29,19 +29,6 @@ export class NotificationController {
     private readonly notificationService: NotificationService,
   ) {}
 
-  @EventPattern('user_registration')
-  async handleUserRegistration(@Payload() data: any) {
-    await this.nodeMailer.sendMail({
-      to: data.email,
-      subject: 'Verify Your Account - WorkHub',
-      html: `
-          <h2>Welcome to WorkHub, ${data.fullName}!</h2>
-          <p>Your verification code is: <strong>${data.otp}</strong></p>
-          <p>This code will expire in 10 minutes.</p>
-        `,
-    })
-  }
-
   @EventPattern('password_reset')
   async handlePasswordReset(@Payload() data: any) {
     await this.nodeMailer.sendMail({
@@ -59,11 +46,12 @@ export class NotificationController {
 
   @Get()
   @ApiOperation({ summary: 'Get all notifications with pagination' })
+  @UseGuards(JwtAuthGuard)
   async getAllNotifications(
     @AuthUser() payload: AuthPayload,
     @Query() query: QueryNotificationDto,
   ) {
-    return this.notificationService.findMany(query)
+    return this.notificationService.findMany(query, payload.sub)
   }
 
   @Get('unread')
@@ -91,5 +79,12 @@ export class NotificationController {
     return {
       message: 'All notifications marked as read',
     }
+  }
+
+  @Get('debug')
+  @ApiOperation({ summary: 'Debug: Get all notifications with data structure' })
+  @UseGuards(JwtAuthGuard)
+  async debugNotifications(@AuthUser() payload: AuthPayload) {
+    return await this.notificationService.getDebugNotifications(payload.sub)
   }
 }

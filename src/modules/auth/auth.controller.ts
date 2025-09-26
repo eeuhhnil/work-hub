@@ -23,7 +23,7 @@ import { LoginLocalDto } from './dtos/login-local.dto'
 import { AuthUser, Public } from './decorators'
 import type { AuthPayload } from './types'
 import { AuthGuard } from '@nestjs/passport'
-import { VerifyOtpDto, VerifyPasswordResetDto } from '../otp/dtos'
+import { VerifyPasswordResetDto } from '../otp/dtos'
 import { RequestPasswordResetDto } from './dtos/request-password-reset.dto'
 import { ChangePasswordDto } from './dtos/change-password.dto'
 
@@ -63,13 +63,17 @@ export class AuthController {
     return req.user
   }
 
-  @Post('verify-otp')
   @Public()
-  @ApiOperation({ summary: 'Verify otp' })
-  @ApiOkResponse({ description: 'Verify otp successfully.' })
+  @Post('refresh')
+  @ApiOperation({ summary: 'Refresh access token' })
+  @ApiOkResponse({ description: 'Token refreshed successfully.' })
   @ApiConflictResponse({ description: 'Internal Server Error.' })
-  async verifyOtp(@Body() verifyOtpDto: VerifyOtpDto) {
-    return this.authService.verifyRegistrationOtp(verifyOtpDto)
+  async refreshToken(@Body('refresh_token') refreshToken: string) {
+    if (!refreshToken) {
+      throw new UnauthorizedException('Refresh token is required')
+    }
+
+    return await this.authService.refreshToken(refreshToken)
   }
 
   @Post('/logout')

@@ -1,10 +1,15 @@
-import { ForbiddenException, Injectable } from '@nestjs/common'
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common'
 import { FilterQuery, PaginateOptions } from 'mongoose'
 import { DbService } from '../../common/db/db.service'
 import { QueryProjectMemberDto } from './dtos/dtos'
 import { IdLike } from '../../common/types'
 import { ProjectMember } from '../../common/db/models'
-import { ProjectRole } from '../../common/enums'
+import { ProjectRole, SpaceRole } from '../../common/enums'
 import { NotificationService } from '../notification/notification.service'
 
 @Injectable()
@@ -36,14 +41,31 @@ export class ProjectMemberService {
     return this.db.projectMember.paginate(filter, options)
   }
 
-  async addMemberToProject(payload: Omit<ProjectMember, '_id'>, actor?: any) {
-    const newMember = await this.db.projectMember.create(payload)
+  async addMemberToProject(
+    projectId: string,
+    memberId: IdLike<string>,
+    ownerId: string,
+  ) {
+    const [project, member, existing] = await Promise.all([
+      this.db.project.exists({ _id: projectId }),
+      this.db.user.exists({ _id: memberId }),
+      this.db.projectMember.exists({ user: memberId, project: projectId }),
+    ])
 
-    // Send notification if actor is provided
+    if (!project) throw new NotFoundException('Project not found')
+    if (!member) throw new NotFoundException('Member not found')
+    if (existing) throw new ConflictException('User already project member')
+
+    const newMember = await this.db.projectMember.create({
+      user: memberId,
+      project: projectId,
+      role: ProjectRole.MEMBER,
+    })
+
     await this.notificationService.notifyMemberAddedToProject(
-      payload.project.toString(),
-      payload.user.toString(),
-      actor,
+      projectId.toString(),
+      memberId.toString(),
+      ownerId.toString(),
     )
 
     return newMember

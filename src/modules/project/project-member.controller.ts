@@ -15,6 +15,7 @@ import { AuthUser } from '../auth/decorators'
 import type { AuthPayload } from '../auth/types'
 import { CreateProjectMemberDto, QueryProjectMemberDto } from './dtos/dtos'
 import { ProjectRole } from '../../common/enums'
+import { UserService } from '../user/user.service'
 
 @Controller('project')
 @ApiBearerAuth()
@@ -22,7 +23,7 @@ import { ProjectRole } from '../../common/enums'
 export class ProjectMemberController {
   constructor(
     private readonly projectMember: ProjectMemberService,
-    private readonly project: ProjectService,
+    private readonly userService: UserService,
   ) {}
 
   @Post()
@@ -31,25 +32,22 @@ export class ProjectMemberController {
     @AuthUser() authPayload: AuthPayload,
     @Body() payload: CreateProjectMemberDto,
   ) {
-    await this.projectMember.checkOwnership(payload.project, authPayload.sub)
-    const { role, ...projectMemberData } = payload
-    await this.projectMember.addMemberToProject({
-      role: role ? role : ProjectRole.MEMBER,
-      ...projectMemberData,
-    })
+    const { projectId, email } = payload
+    await this.projectMember.checkOwnership(projectId, authPayload.sub)
 
-    return {
-      message: 'Added member to project',
-    }
+    const user = await this.userService.findOne({ email: email })
+    if (!user) throw new NotFoundException('User not found')
+
+    return await this.projectMember.addMemberToProject(
+      projectId,
+      user._id,
+      authPayload.sub,
+    )
   }
 
   @Get()
   @ApiOperation({ summary: 'Get member from project' })
-  async findMany(
-    @AuthUser() authPayload: AuthPayload,
-    @Query() query: QueryProjectMemberDto,
-  ) {
-    await this.projectMember.checkOwnership(query.project, authPayload.sub)
+  async findMany(@Query() query: QueryProjectMemberDto) {
     return await this.projectMember.findMany(query)
   }
 

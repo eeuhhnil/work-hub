@@ -19,4 +19,9 @@ export class CreateProjectDto {
   description?: string
 }
 
-export class QueryProjectDto extends PaginationDTO {}
+export class QueryProjectDto extends PaginationDTO {
+  @ApiPropertyOptional()
+  @IsMongoId()
+  @IsOptional()
+  space?: string
+}

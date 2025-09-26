@@ -2,13 +2,20 @@ import { NestFactory } from '@nestjs/core'
 import { AppModule } from './app.module'
 import { ConfigService } from '@nestjs/config'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
+import { NestExpressApplication } from '@nestjs/platform-express'
+import { join } from 'path'
 import { ValidationPipe } from '@nestjs/common'
 import { ErrorInterceptor, TransformInterceptor } from './common/interceptors'
 import { MicroserviceOptions, Transport } from '@nestjs/microservices'
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule)
+  const app = await NestFactory.create<NestExpressApplication>(AppModule)
   const config = app.get<ConfigService>(ConfigService)
+
+  // Serve static files
+  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+    prefix: '/uploads/',
+  })
 
   // CORS
   app.enableCors({

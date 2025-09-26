@@ -4,7 +4,7 @@ import { User } from './user.model'
 import { Space } from './space.model'
 import { Project } from './project.model'
 import paginate from 'mongoose-paginate-v2'
-import { TaskStatus } from '../../enums'
+import { TaskStatus, TaskPriority } from '../../enums'
 
 @Schema({
   timestamps: true,
@@ -54,6 +54,14 @@ export class Task {
   status?: TaskStatus
 
   @Prop({
+    type: String,
+    enum: Object.values(TaskPriority),
+    default: TaskPriority.MEDIUM,
+    required: false,
+  })
+  priority?: TaskPriority
+
+  @Prop({
     type: Date,
     required: false,
   })
@@ -63,7 +71,36 @@ export class Task {
     type: Date,
     required: false,
   })
+  startDate?: Date
+
+  @Prop({
+    type: Date,
+    required: false,
+  })
   dueDate?: Date
+
+  @Prop({
+    type: [
+      {
+        filename: { type: String, required: true },
+        originalName: { type: String, required: true },
+        url: { type: String, required: true },
+        size: { type: Number, required: true },
+        mimetype: { type: String, required: true },
+        uploadedAt: { type: Date, default: Date.now },
+      },
+    ],
+    required: false,
+    default: [],
+  })
+  attachments?: Array<{
+    filename: string
+    originalName: string
+    url: string
+    size: number
+    mimetype: string
+    uploadedAt: Date
+  }>
 }
 
 export const TaskSchema = SchemaFactory.createForClass(Task)

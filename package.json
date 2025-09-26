@@ -29,10 +29,11 @@
     "@nestjs/microservices": "^11.1.6",
     "@nestjs/mongoose": "^11.0.3",
     "@nestjs/passport": "^11.0.5",
-    "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/platform-express": "^11.1.6",
     "@nestjs/platform-socket.io": "^11.1.6",
     "@nestjs/swagger": "^11.2.0",
     "@nestjs/websockets": "^11.1.6",
+    "@types/uuid": "^10.0.0",
     "amqp-connection-manager": "^4.1.14",
     "amqplib": "^0.10.9",
     "axios": "^1.11.0",
@@ -41,6 +42,7 @@
     "class-validator": "^0.14.2",
     "mongoose": "^8.18.0",
     "mongoose-paginate-v2": "^1.9.1",
+    "multer": "^2.0.2",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "passport-jwt": "^4.0.1",
@@ -49,8 +51,8 @@
     "rxjs": "^7.8.1",
     "sharp": "^0.34.3",
     "socket.io": "^4.8.1",
-    "socket.io-client": "^4.8.1",
-    "ua-parser-js": "^2.0.4"
+    "ua-parser-js": "^2.0.4",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

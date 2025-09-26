@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common'
+import { Module, forwardRef } from '@nestjs/common'
 import { UserModule } from '../user/user.module'
 import { ProjectService } from './project.service'
 import { ProjectMemberService } from './project-member.service'
@@ -8,7 +8,7 @@ import { SpaceModule } from '../spaces/space.module'
 import { NotificationModule } from '../notification/notification.module'
 
 @Module({
-  imports: [UserModule, SpaceModule, NotificationModule],
+  imports: [UserModule, forwardRef(() => SpaceModule), NotificationModule],
   controllers: [ProjectController, ProjectMemberController],
   providers: [ProjectService, ProjectMemberService],
   exports: [ProjectService, ProjectMemberService],

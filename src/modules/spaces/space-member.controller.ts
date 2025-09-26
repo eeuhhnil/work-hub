@@ -14,12 +14,16 @@ import { SpaceMemberService } from './space-member.service'
 import { AuthUser } from '../auth/decorators'
 import type { AuthPayload } from '../auth/types'
 import { CreateSpaceMemberDto, QuerySpacesDto } from './dtos'
+import { UserService } from '../user/user.service'
 
 @Controller('space-members')
 @ApiTags('Space Members')
 @ApiBearerAuth()
 export class SpaceMemberController {
-  constructor(private readonly spaceMember: SpaceMemberService) {}
+  constructor(
+    private readonly spaceMember: SpaceMemberService,
+    private readonly userService: UserService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Add member to space' })
@@ -27,10 +31,17 @@ export class SpaceMemberController {
     @AuthUser() authPayload: AuthPayload,
     @Body() payload: CreateSpaceMemberDto,
   ) {
-    const { spaceId, userId } = payload
+    const { spaceId, email } = payload
     await this.spaceMember.checkOwnership(spaceId, authPayload.sub)
 
-    return await this.spaceMember.createOne(spaceId, userId, authPayload.sub)
+    const user = await this.userService.findOne({ email: email })
+    if (!user) throw new NotFoundException('User not found')
+
+    return await this.spaceMember.createOne(
+      spaceId,
+      user._id.toString(),
+      authPayload.sub,
+    )
   }
 
   @Get('/space/:spaceId')

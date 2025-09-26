@@ -61,6 +61,44 @@ export class StorageService implements OnModuleInit {
     }
   }
 
+  async processDocumentFile(file: Express.Multer.File) {
+    // Validate file type
+    const allowedMimeTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    ]
+
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      throw new Error(`Unsupported file type: ${file.mimetype}`)
+    }
+
+    // For documents, we don't process the content, just validate and return
+    return {
+      ...file,
+      buffer: file.buffer,
+      mimeType: file.mimetype,
+      originalName: file.originalname,
+    }
+  }
+
+  isDocumentFile(mimetype: string): boolean {
+    const documentMimeTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    ]
+    return documentMimeTypes.includes(mimetype)
+  }
+
   async uploadFile(fileKey: string, file: Express.Multer.File) {
     const uploadParam: PutObjectCommandInput = {
       Bucket: this.s3Bucket,

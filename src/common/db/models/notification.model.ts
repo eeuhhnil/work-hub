@@ -9,6 +9,12 @@ export class Notification {
   @Prop({ type: String, required: true, ref: 'User' })
   recipientId: IdLike<User>
 
+  @Prop({ type: String, required: false, ref: 'User' })
+  actorId?: IdLike<User>
+
+  @Prop({ type: String, required: false })
+  actorName?: string
+
   @Prop({ type: Boolean, default: false })
   isRead: boolean
 
@@ -20,6 +26,10 @@ export class Notification {
 
   @Prop({ type: String, required: true })
   type: NotificationType
+
+  // Timestamps added by Mongoose
+  createdAt?: Date
+  updatedAt?: Date
 }
 export const NotificationSchema = SchemaFactory.createForClass(Notification)
 NotificationSchema.plugin(paginate)

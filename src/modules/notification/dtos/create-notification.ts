@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import {
   IsEnum,
   IsNotEmpty,
@@ -18,14 +18,15 @@ export class CreateNotificationDto {
   @IsNotEmpty()
   recipientId: string
 
-  // @ApiProperty({
-  //   description: 'ID của người gửi thông báo (có thể null với system notification)',
-  //   example: '64ff1b2c3d4e5f6789ab0fff',
-  //   required: false,
-  // })
-  // @IsOptional()
-  // @IsString()
-  // senderId?: string;
+  @ApiProperty({
+    description:
+      'ID của người thực hiện hành động (có thể null với system notification)',
+    example: '64ff1b2c3d4e5f6789ab0fff',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  actorId?: string
 
   @ApiProperty({
     description: 'Loại thông báo',
@@ -34,6 +35,15 @@ export class CreateNotificationDto {
   })
   @IsEnum(NotificationType)
   type: NotificationType
+
+  @ApiProperty({
+    description: 'Tên người thực hiện hành động (dùng để hiển thị message)',
+    example: 'Hue Linh',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  actorName?: string
 
   @ApiProperty({
     description:
@@ -49,4 +59,12 @@ export class CreateNotificationDto {
   data?: Record<string, any>
 }
 
-export class QueryNotificationDto extends PaginationDTO {}
+export class QueryNotificationDto extends PaginationDTO {
+  @ApiPropertyOptional({
+    description: 'Space ID to filter notifications by space',
+    example: '64ff1b2c3d4e5f6789ab0cde',
+  })
+  @IsOptional()
+  @IsString()
+  spaceId?: string
+}

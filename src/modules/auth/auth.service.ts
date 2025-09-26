@@ -38,47 +38,17 @@ export class AuthService {
     const user = await this.db.user.exists({ email })
     if (user) throw new ConflictException('USER_EXISTS')
 
-    const newUser = await this.db.user.create({
+    await this.db.user.create({
       email,
       username: await this.generateUniqueUsername(fullName),
       password: bcrypt.hashSync(password, 10),
       fullName,
-      isActive: false,
-    })
-
-    const otpRecord = await this.otpService.createOtp(newUser._id!.toString())
-
-    this.notificationClient.emit('user_registration', {
-      email: newUser.email,
-      fullName: newUser.fullName,
-      otp: otpRecord.code,
+      isActive: true,
     })
 
     return {
-      message: 'Registration successful. Please check your email for OTP.',
+      message: 'Registration successful.',
     }
-  }
-
-  async verifyRegistrationOtp(verifyOtpDto: VerifyOtpDto) {
-    const { email, otp: code } = verifyOtpDto
-    const user = await this.db.user.findOne({ email })
-    if (!user) throw new UnauthorizedException('User not found')
-
-    const isValid = await this.otpService.verifyOtp(
-      user._id!.toString(),
-      code,
-      OtpType.REGISTRATION,
-    )
-    if (!isValid) throw new UnauthorizedException('Invalid or expired OTP')
-
-    // Activate user
-    await this.db.user.findOneAndUpdate(
-      { _id: user._id! },
-      { isActive: true },
-      { new: true },
-    )
-
-    return { message: 'Account activated successfully' }
   }
 
   async loginLocal(user: User, req: any) {
@@ -102,6 +72,41 @@ export class AuthService {
     }
 
     await this.sessionService.deleteOne({ _id: session._id })
+  }
+
+  async refreshToken(refreshToken: string) {
+    try {
+      const payload: any = this.jwt.verify(refreshToken, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+      })
+
+      const session = await this.sessionService.findOne({ _id: payload.jti })
+      if (!session) {
+        throw new UnauthorizedException('Invalid refresh token')
+      }
+
+      const user = await this.db.user.findById(payload.sub)
+      if (!user) {
+        throw new UnauthorizedException('User not found')
+      }
+
+      // Generate new access token
+      const access_token = await this.jwt.signAsync(
+        {
+          jti: session._id!.toString(),
+          sub: user._id!.toString(),
+          email: user.email,
+          role: user.role,
+        },
+        {
+          secret: this.configService.get<string>('JWT_SECRET'),
+        },
+      )
+
+      return { access_token }
+    } catch (error) {
+      throw new UnauthorizedException('Invalid refresh token')
+    }
   }
 
   async logoutDevice(userId: string, sessionId: string) {

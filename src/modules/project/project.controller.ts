@@ -31,6 +31,8 @@ import {
   CreateProjectDto,
   QueryProjectDto,
   UpdateProjectDto,
+  ProjectProgressDto,
+  UserProjectsProgressResponseDto,
 } from './dtos/dtos'
 import { FileInterceptor } from '@nestjs/platform-express'
 
@@ -53,16 +55,50 @@ export class ProjectController {
   ) {
     await this.spaceMember.checkOwnership(payload.space, authPayload.sub)
 
-    return await this.project.createOne(authPayload.sub, payload)
+    return await this.project.createOne(authPayload.sub, payload, authPayload)
+  }
+
+  @Get('with-progress')
+  @ApiOperation({ summary: 'Get all projects with progress for current user' })
+  async getUserProjectsWithProgress(@AuthUser() authPayload: AuthPayload) {
+    return this.project.findUserProjectsWithProgress(authPayload.sub)
+  }
+
+  @Get('user-projects')
+  @ApiOperation({ summary: 'Get all projects user has access to' })
+  async findUserProjects(@AuthUser() authPayload: AuthPayload) {
+    return await this.project.findUserProjects(authPayload.sub)
+  }
+
+  @Post('space/:spaceId')
+  @ApiOperation({ summary: 'Create project in specific space' })
+  async createProjectInSpace(
+    @AuthUser() authPayload: AuthPayload,
+    @Param('spaceId') spaceId: string,
+    @Body() payload: Omit<CreateProjectDto, 'space'>,
+  ) {
+    await this.spaceMember.checkOwnership(spaceId, authPayload.sub)
+
+    const projectData = {
+      ...payload,
+      space: spaceId,
+    }
+
+    return await this.project.createOne(
+      authPayload.sub,
+      projectData,
+      authPayload,
+    )
   }
 
   @Get()
-  @ApiOperation({ summary: 'Find many projects' })
+  @ApiOperation({ summary: 'Find many projects that user has access to' })
   async findMany(
     @AuthUser() authPayload: AuthPayload,
     @Query() query: QueryProjectDto,
   ) {
-    return await this.project.findMany(query)
+    // Chỉ trả về projects mà user có quyền truy cập
+    return await this.project.findMany(query, authPayload.sub)
   }
 
   @Get(':projectId')

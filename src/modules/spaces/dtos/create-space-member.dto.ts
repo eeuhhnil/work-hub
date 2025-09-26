@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger'
-import { IsMongoId, IsNotEmpty } from 'class-validator'
+import { IsEmail, IsMongoId, IsNotEmpty } from 'class-validator'
 
 export class CreateSpaceMemberDto {
   @ApiProperty()
@@ -8,7 +8,7 @@ export class CreateSpaceMemberDto {
   spaceId: string
 
   @ApiProperty()
-  @IsMongoId()
+  @IsEmail()
   @IsNotEmpty()
-  userId: string
+  email: string
 }

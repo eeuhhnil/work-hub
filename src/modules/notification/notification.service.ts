@@ -20,13 +20,37 @@ export class NotificationService {
   }
 
   private async sendNotificationToUser(userId: string, notificationData: any) {
+    console.log('📤 sendNotificationToUser called with:', {
+      userId,
+      type: notificationData.type,
+      actorName: notificationData.actorName,
+      actorId: notificationData.actorId,
+      data: notificationData.data,
+    })
+
     const savedNotification = await this.createNotification({
       recipientId: userId,
+      actorId: notificationData.actorId,
+      actorName: notificationData.actorName,
       type: notificationData.type,
       data: notificationData.data,
     })
 
-    this.gateway.sendNotification(userId, notificationData)
+    const notificationToSend = {
+      ...savedNotification.toObject(),
+    }
+
+    console.log('📤 Sending notification to frontend:', notificationToSend)
+
+    // Check if gateway is available before sending
+    if (this.gateway && typeof this.gateway.sendNotification === 'function') {
+      this.gateway.sendNotification(userId, notificationToSend)
+      console.log('✅ Notification sent via WebSocket')
+    } else {
+      console.warn(
+        '⚠️ Gateway not available, notification saved but not sent via WebSocket',
+      )
+    }
 
     return savedNotification
   }
@@ -34,6 +58,8 @@ export class NotificationService {
   async createNotification(payload: CreateNotificationDto) {
     return await this.db.notification.create({
       recipientId: payload.recipientId,
+      actorId: payload.actorId,
+      actorName: payload.actorName,
       type: payload.type,
       data: payload.data,
     })
@@ -41,12 +67,37 @@ export class NotificationService {
 
   async findMany(
     query: QueryNotificationDto,
+    userId?: string,
   ): Promise<{ data: Notification[]; meta: PaginationMetadata }> {
-    const { page = 1, limit = 10, search } = query
+    const { page = 1, limit = 10, search, spaceId } = query
 
-    const where: any = {}
+    let where: any = {}
     if (search) {
       where.$or = [{ type: { $regex: search, $options: 'i' } }]
+    }
+
+    // If userId is provided, get notifications where user is recipient OR actor
+    if (userId) {
+      const userCondition = {
+        $or: [{ recipientId: userId }, { actorId: userId }],
+      }
+      where = search ? { $and: [where, userCondition] } : userCondition
+    }
+
+    // Filter by spaceId if provided
+    if (spaceId) {
+      console.log(`🔍 Filtering notifications by spaceId: ${spaceId}`)
+      const spaceCondition = {
+        $or: [
+          { 'data.spaceId': spaceId },
+          { 'data.space': spaceId },
+        ]
+      }
+      where = where.$and ?
+        { $and: [...where.$and, spaceCondition] } :
+        (Object.keys(where).length > 0 ? { $and: [where, spaceCondition] } : spaceCondition)
+
+      console.log(`🔍 Final query condition:`, JSON.stringify(where, null, 2))
     }
 
     // lấy dữ liệu và tổng số
@@ -59,6 +110,15 @@ export class NotificationService {
       this.db.notification.countDocuments(where),
     ])
 
+    console.log(`📊 Query results: Found ${data.length} notifications out of ${total} total`)
+    if (spaceId) {
+      console.log(`📊 Notifications data structure sample:`, data.slice(0, 2).map(n => ({
+        id: n._id,
+        type: n.type,
+        data: n.data
+      })))
+    }
+
     const meta: PaginationMetadata = {
       page,
       limit,
@@ -69,9 +129,38 @@ export class NotificationService {
     return { data, meta }
   }
 
-  async notifyCreateSpace(userId: string, space: any) {
+  async getDebugNotifications(userId: string) {
+    const notifications = await this.db.notification
+      .find({ recipientId: userId })
+      .sort({ createdAt: -1 })
+      .limit(20)
+
+    return {
+      total: notifications.length,
+      notifications: notifications.map(n => ({
+        id: n._id,
+        type: n.type,
+        data: n.data,
+        createdAt: n.createdAt,
+        isRead: n.isRead
+      }))
+    }
+  }
+
+  async notifyCreateSpace(userId: string, space: any, actor?: any) {
+    // Get actor user info
+    let actorUser = actor
+    if (actor?.sub && !actor._id) {
+      actorUser = await this.db.user.findById(actor.sub)
+    }
+
+    const actorId = actorUser?._id || actorUser?.sub
+    const actorName = actorUser?.fullName || actorUser?.email || 'Someone'
+
     await this.sendNotificationToUser(userId, {
       type: NotificationType.CREATE_SPACE,
+      actorId: actorId?.toString(),
+      actorName: actorName,
       data: {
         spaceId: space._id.toString(),
         spaceName: space.name,
@@ -79,15 +168,27 @@ export class NotificationService {
     })
   }
 
-  async notifyUpdatedSpace(spaceId: string, actorId: string) {
+  async notifyUpdatedSpace(spaceId: string, actor: any) {
+    // Get actor user info
+    let actorUser = actor
+    if (actor?.sub && !actor._id) {
+      actorUser = await this.db.user.findById(actor.sub)
+      if (!actorUser) {
+        return // Skip if user not found
+      }
+    }
+
+    const actorId = actorUser._id || actorUser.sub
+    const actorName = actorUser.fullName || actorUser.email || 'Unknown User'
     const members = await this.db.spaceMember.find({ space: spaceId })
 
     for (const member of members) {
-      if (member.user.toString() !== actorId) {
+      if (member.user.toString() !== actorId.toString()) {
         await this.sendNotificationToUser(member.user.toString(), {
           type: NotificationType.UPDATE_SPACE,
+          actorName: actorName,
           data: {
-            actorId: actorId,
+            actorId: actorId.toString(),
             spaceId: spaceId,
           },
         })
@@ -96,17 +197,32 @@ export class NotificationService {
   }
 
   async notifyDeletedSpace(spaceId: string, actor: any, spaceName: string) {
+    // Nếu actor không tồn tại thì bỏ qua
+    // if (!actor) return;
+
+    // Lấy thông tin user nếu actor là AuthPayload (có sub nhưng không có _id)
+    let actorUser = actor
+    if (actor.sub && !actor._id) {
+      actorUser = await this.db.user.findById(actor.sub)
+      if (!actorUser) {
+        return // Bỏ qua nếu không tìm thấy user
+      }
+    }
+
+    const actorId = actorUser._id || actorUser.sub // ID của actor
     const members = await this.db.spaceMember.find({ space: spaceId })
+    const actorName = actorUser.fullName || actorUser.email || 'Unknown User'
 
     for (const member of members) {
-      if (member.user.toString() !== actor._id.toString()) {
+      // Chỉ gửi notification cho các thành viên khác, không gửi cho actor
+      if (member.user.toString() !== actorId.toString()) {
         await this.sendNotificationToUser(member.user.toString(), {
           type: NotificationType.DELETE_SPACE,
-          actorId: actor._id.toString(),
-          actorName: actor.fullName,
+          actorId: actorId.toString(),
+          actorName: actorName,
           data: {
-            spaceId: spaceId,
-            spaceName: spaceName,
+            spaceId,
+            spaceName,
           },
         })
       }
@@ -117,40 +233,52 @@ export class NotificationService {
   async notifyMemberAddedToSpace(
     spaceId: string,
     memberId: string,
-    actorId: string,
+    actor: any,
   ) {
-    const [space, members] = await Promise.all([
+    // Get actor user info
+    let actorUser = actor
+    if (typeof actor === 'string') {
+      actorUser = await this.db.user.findById(actor)
+    } else if (actor?.sub && !actor._id) {
+      actorUser = await this.db.user.findById(actor.sub)
+    }
+
+    if (!actorUser) {
+      return // Skip if actor not found
+    }
+
+    const actorId = actorUser._id || actorUser.sub
+    const actorName = actorUser.fullName || actorUser.email || 'Unknown User'
+
+    const [space, members, newMember] = await Promise.all([
       this.db.space.findById(spaceId),
       this.db.spaceMember.find({ space: spaceId }),
+      this.db.user.findById(memberId),
     ])
 
     if (!space) {
       throw new NotFoundException(`Space with id ${spaceId} not found`)
     }
 
-    // Notify the new member
-    await this.sendNotificationToUser(memberId, {
-      type: NotificationType.YOU_WERE_ADDED_TO_SPACE,
-      data: {
-        actorId: actorId.toString(),
-        spaceId: space._id.toString(),
-        spaceName: space.name,
-      },
-    })
+    const newMemberName =
+      newMember?.fullName || newMember?.email || 'Unknown User'
 
-    // Notify other members
+    // Notify other members (excluding actor and new member)
     for (const member of members) {
       if (
-        member.user.toString() !== actorId &&
+        member.user.toString() !== actorId.toString() &&
         member.user.toString() !== memberId
       ) {
         await this.sendNotificationToUser(member.user.toString(), {
           type: NotificationType.ADD_MEMBER_TO_SPACE,
+          actorId: actorId.toString(),
+          actorName: actorName,
           data: {
             actorId: actorId.toString(),
             spaceId: spaceId,
             spaceName: space.name,
             newMemberId: memberId,
+            newMemberName: newMemberName,
           },
         })
       }
@@ -160,25 +288,30 @@ export class NotificationService {
   async notifyMemberRemovedFromSpace(
     spaceId: string,
     removedMemberId: string,
-    actorId: string,
+    actor: any,
   ) {
-    const [space, members] = await Promise.all([
+    // Get actor user info
+    let actorUser = actor
+    if (typeof actor === 'string') {
+      actorUser = await this.db.user.findById(actor)
+    } else if (actor?.sub && !actor._id) {
+      actorUser = await this.db.user.findById(actor.sub)
+    }
+
+    const actorId = actorUser._id || actorUser.sub
+    const actorName = actorUser.fullName
+
+    const [space, members, removedMember] = await Promise.all([
       this.db.space.findById(spaceId),
       this.db.spaceMember.find({ space: spaceId }),
+      this.db.user.findById(removedMemberId),
     ])
 
     if (!space) {
       throw new NotFoundException(`Space with id ${spaceId} not found`)
     }
 
-    // Notify the removed member
-    await this.sendNotificationToUser(removedMemberId, {
-      type: NotificationType.YOU_WERE_REMOVED_FROM_SPACE,
-      data: {
-        spaceId: spaceId,
-        spaceName: space.name,
-      },
-    })
+    const removedMemberName = removedMember?.fullName
 
     // Notify other members
     for (const member of members) {
@@ -188,11 +321,12 @@ export class NotificationService {
       ) {
         await this.sendNotificationToUser(member.user.toString(), {
           type: NotificationType.REMOVE_MEMBER_FROM_SPACE,
-          actorId: actorId.toString(),
+          actorName: actorName,
           data: {
             spaceId: spaceId,
             spaceName: space.name,
             removedMemberId: removedMemberId,
+            removedMemberName: removedMemberName,
           },
         })
       }
@@ -200,26 +334,34 @@ export class NotificationService {
   }
 
   // Project Notifications
-  async notifyCreateProject(userId: string, project: any) {
-    await this.sendNotificationToUser(userId, {
-      type: NotificationType.CREATE_PROJECT,
-      data: {
-        projectId: project._id.toString(),
-        projectName: project.name,
-      },
-    })
-  }
 
-  async notifyUpdatedProject(projectId: string, actorId: string) {
+  async notifyUpdatedProject(projectId: string, actor: any) {
+    // Get actor user info
+    let actorUser = actor
+    if (typeof actor === 'string') {
+      actorUser = await this.db.user.findById(actor)
+    } else if (actor?.sub && !actor._id) {
+      actorUser = await this.db.user.findById(actor.sub)
+    }
+
+    if (!actorUser) {
+      return // Skip if actor not found
+    }
+
+    const actorId = actorUser._id || actorUser.sub
+    const actorName = actorUser.fullName || actorUser.email || 'Unknown User'
+    const project = await this.db.project.findById(projectId)
     const members = await this.db.projectMember.find({ project: projectId })
 
     for (const member of members) {
       if (member.user.toString() !== actorId.toString()) {
         await this.sendNotificationToUser(member.user.toString(), {
           type: NotificationType.UPDATE_PROJECT,
-          actorId: actorId.toString(),
+          actorName: actorName,
           data: {
+            actorId: actorId.toString(),
             projectId: projectId,
+            projectName: project?.name || 'Unknown Project',
           },
         })
       }
@@ -231,14 +373,29 @@ export class NotificationService {
     actor: any,
     projectName: string,
   ) {
+    // If actor is undefined or null, skip notifications
+    if (!actor) {
+      return
+    }
+
+    // Get actor user info if actor is AuthPayload (has sub property)
+    let actorUser = actor
+    if (actor.sub && !actor._id) {
+      actorUser = await this.db.user.findById(actor.sub)
+      if (!actorUser) {
+        return // Skip if user not found
+      }
+    }
+
     const members = await this.db.projectMember.find({ project: projectId })
+    const actorId = actorUser._id || actorUser.sub
 
     for (const member of members) {
-      if (member.user.toString() !== actor._id.toString()) {
+      if (member.user.toString() !== actorId.toString()) {
         await this.sendNotificationToUser(member.user.toString(), {
           type: NotificationType.DELETE_PROJECT,
-          actorId: actor._id.toString(),
-          actorName: actor.fullName,
+          actorId: actorId.toString(),
+          actorName: actorUser.fullName || actorUser.email || 'Unknown User',
           data: {
             projectId: projectId,
             projectName: projectName,
@@ -254,38 +411,49 @@ export class NotificationService {
     newMemberId: string,
     actor: any,
   ) {
-    const [project, members] = await Promise.all([
+    // Get actor user info
+    let actorUser = actor
+    if (typeof actor === 'string') {
+      actorUser = await this.db.user.findById(actor)
+    } else if (actor?.sub && !actor._id) {
+      actorUser = await this.db.user.findById(actor.sub)
+    }
+
+    if (!actorUser) {
+      return // Skip if actor not found
+    }
+
+    const actorId = actorUser._id || actorUser.sub
+    const actorName = actorUser.fullName || actorUser.email || 'Unknown User'
+
+    const [project, members, newMember] = await Promise.all([
       this.db.project.findById(projectId),
       this.db.projectMember.find({ project: projectId }),
+      this.db.user.findById(newMemberId),
     ])
 
     if (!project) {
       throw new NotFoundException(`Project with id ${projectId} not found`)
     }
 
-    // Notify the new member
-    await this.sendNotificationToUser(newMemberId, {
-      type: NotificationType.YOU_WERE_ADDED_TO_PROJECT,
-      data: {
-        projectId: project._id.toString(),
-        projectName: project.name,
-      },
-    })
+    const newMemberName = newMember?.fullName
 
     // Notify other members
     for (const member of members) {
       if (
-        member.user.toString() !== actor._id.toString() &&
+        member.user.toString() !== actorId.toString() &&
         member.user.toString() !== newMemberId
       ) {
         await this.sendNotificationToUser(member.user.toString(), {
           type: NotificationType.ADD_MEMBER_TO_PROJECT,
-          actorId: actor._id.toString(),
-          actorName: actor.fullName,
+          actorId: actorId.toString(),
+          actorName: actorName,
           data: {
+            actorId: actorId.toString(),
             projectId: projectId,
             projectName: project.name,
             newMemberId: newMemberId,
+            newMemberName: newMemberName,
           },
         })
       }
@@ -297,18 +465,38 @@ export class NotificationService {
     removedMemberId: string,
     actor: any,
   ) {
-    const [project, members] = await Promise.all([
+    // Get actor user info
+    let actorUser = actor
+    if (typeof actor === 'string') {
+      actorUser = await this.db.user.findById(actor)
+    } else if (actor?.sub && !actor._id) {
+      actorUser = await this.db.user.findById(actor.sub)
+    }
+
+    if (!actorUser) {
+      return // Skip if actor not found
+    }
+
+    const actorId = actorUser._id || actorUser.sub
+    const actorName = actorUser.fullName || actorUser.email || 'Unknown User'
+
+    const [project, members, removedMember] = await Promise.all([
       this.db.project.findById(projectId),
       this.db.projectMember.find({ project: projectId }),
+      this.db.user.findById(removedMemberId),
     ])
 
     if (!project) {
       throw new NotFoundException(`Project with id ${projectId} not found`)
     }
 
+    const removedMemberName =
+      removedMember?.fullName || removedMember?.email || 'Unknown User'
+
     // Notify the removed member
     await this.sendNotificationToUser(removedMemberId, {
       type: NotificationType.YOU_WERE_REMOVED_FROM_PROJECT,
+      actorName: actorName,
       data: {
         projectId: projectId,
         projectName: project.name,
@@ -318,17 +506,18 @@ export class NotificationService {
     // Notify other members
     for (const member of members) {
       if (
-        member.user.toString() !== actor._id.toString() &&
+        member.user.toString() !== actorId.toString() &&
         member.user.toString() !== removedMemberId
       ) {
         await this.sendNotificationToUser(member.user.toString(), {
           type: NotificationType.REMOVE_MEMBER_FROM_PROJECT,
-          actorId: actor._id.toString(),
-          actorName: actor.fullName,
+          actorName: actorName,
           data: {
+            actorId: actorId.toString(),
             projectId: projectId,
             projectName: project.name,
             removedMemberId: removedMemberId,
+            removedMemberName: removedMemberName,
           },
         })
       }
@@ -337,77 +526,76 @@ export class NotificationService {
 
   // Task Notifications
   async notifyCreateTask(task: any, actor: any) {
-    const [projectMembers, spaceMembers] = await Promise.all([
-      this.db.projectMember.find({ project: task.project }),
-      this.db.spaceMember.find({ space: task.space }),
-    ])
-
-    // Notify assignee if different from creator
-    if (task.assignee && task.assignee.toString() !== actor._id.toString()) {
-      await this.sendNotificationToUser(task.assignee.toString(), {
-        type: NotificationType.YOU_WERE_ASSIGNED_TASK,
-        data: {
-          taskId: task._id.toString(),
-          taskTitle: task.title,
-          projectId: task.project.toString(),
-          spaceId: task.space.toString(),
-        },
-      })
+    if (!actor) {
+      return
     }
 
-    // Notify project members
-    for (const member of projectMembers) {
-      if (
-        member.user.toString() !== actor._id.toString() &&
-        member.user.toString() !== task.assignee?.toString()
-      ) {
-        await this.sendNotificationToUser(member.user.toString(), {
-          type: NotificationType.CREATE_TASK,
-          actorId: actor._id.toString(),
-          actorName: actor.fullName,
-          data: {
-            taskId: task._id.toString(),
-            taskTitle: task.title,
-            projectId: task.project.toString(),
-            spaceId: task.space.toString(),
-            assigneeId: task.assignee?.toString(),
-          },
-        })
+    let actorUser = actor
+    if (actor.sub && !actor._id) {
+      actorUser = await this.db.user.findById(actor.sub)
+      if (!actorUser) {
+        return // Skip if user not found
       }
+    }
+
+    const [projectMembers, spaceMembers, assigneeUser] = await Promise.all([
+      this.db.projectMember.find({ project: task.project }),
+      this.db.spaceMember.find({ space: task.space }),
+      task.assignee ? this.db.user.findById(task.assignee) : null,
+    ])
+
+    const actorId = actorUser._id || actorUser.sub
+    const actorName = actorUser.fullName || actorUser.email || 'Unknown User'
+    const assigneeName =
+      assigneeUser?.fullName || assigneeUser?.email || 'Unknown User'
+
+    // Notify assignee if different from creator
+    if (task.assignee && task.assignee.toString() !== actorId.toString()) {
+      await this.sendNotificationToUser(task.assignee.toString(), {
+        type: NotificationType.YOU_WERE_ASSIGNED_TASK,
+        actorId: actorId.toString(),
+        actorName: actorName,
+        data: {
+          taskId: task._id.toString(),
+          taskTitle: task.name,
+          projectId: task.project.toString(),
+          spaceId: task.space.toString(),
+          assigneeId: task.assignee?.toString(), // nên thêm để frontend check
+          assigneeName: assigneeName,
+        },
+      })
     }
   }
 
   async notifyUpdatedTask(task: any, actor: any, changes: any) {
+    if (!actor) {
+      return
+    }
+
+    let actorUser = actor
+    if (actor.sub && !actor._id) {
+      actorUser = await this.db.user.findById(actor.sub)
+      if (!actorUser) {
+        return // Skip if user not found
+      }
+    }
+
     const [projectMembers] = await Promise.all([
       this.db.projectMember.find({ project: task.project }),
     ])
 
-    // Notify assignee if task was reassigned
-    if (
-      changes.assignee &&
-      changes.assignee.toString() !== actor._id.toString()
-    ) {
-      await this.sendNotificationToUser(changes.assignee.toString(), {
-        type: NotificationType.YOU_WERE_ASSIGNED_TASK,
-        data: {
-          taskId: task._id.toString(),
-          taskTitle: task.title,
-          projectId: task.project.toString(),
-          spaceId: task.space.toString(),
-        },
-      })
-    }
+    const actorId = actorUser._id || actorUser.sub
 
     // Notify project members about task update
     for (const member of projectMembers) {
-      if (member.user.toString() !== actor._id.toString()) {
+      if (member.user.toString() !== actorId.toString()) {
         await this.sendNotificationToUser(member.user.toString(), {
           type: NotificationType.UPDATE_TASK,
-          actorId: actor._id.toString(),
-          actorName: actor.fullName,
+          actorId: actorId.toString(),
+          actorName: actorUser.fullName,
           data: {
             taskId: task._id.toString(),
-            taskTitle: task.title,
+            taskTitle: task.name,
             projectId: task.project.toString(),
             spaceId: task.space.toString(),
             changes: changes,
@@ -423,20 +611,36 @@ export class NotificationService {
     spaceId: string,
     actor: any,
   ) {
+    // If actor is undefined or null, skip notifications
+    if (!actor) {
+      return
+    }
+
+    // Get actor user info if actor is AuthPayload (has sub property)
+    let actorUser = actor
+    if (actor.sub && !actor._id) {
+      actorUser = await this.db.user.findById(actor.sub)
+      if (!actorUser) {
+        return // Skip if user not found
+      }
+    }
+
     const projectMembers = await this.db.projectMember.find({
       project: projectId,
     })
 
+    const actorId = actorUser._id || actorUser.sub
+
     for (const member of projectMembers) {
-      if (member.user.toString() !== actor._id.toString()) {
+      if (member.user.toString() !== actorId.toString()) {
         await this.sendNotificationToUser(member.user.toString(), {
           type: NotificationType.DELETE_TASK,
-          actorId: actor._id.toString(),
-          actorName: actor.fullName,
+          actorId: actorId.toString(),
+          actorName: actorUser.fullName || actorUser.email || 'Unknown User',
           data: {
-            taskId: taskId,
-            projectId: projectId,
-            spaceId: spaceId,
+            taskId,
+            projectId,
+            spaceId,
           },
         })
       }
@@ -444,19 +648,35 @@ export class NotificationService {
   }
 
   async notifyTaskStatusChanged(task: any, newStatus: string, actor: any) {
+    // If actor is undefined or null, skip notifications
+    if (!actor) {
+      return
+    }
+
+    // Get actor user info if actor is AuthPayload (has sub property)
+    let actorUser = actor
+    if (actor.sub && !actor._id) {
+      actorUser = await this.db.user.findById(actor.sub)
+      if (!actorUser) {
+        return // Skip if user not found
+      }
+    }
+
     const projectMembers = await this.db.projectMember.find({
       project: task.project,
     })
 
+    const actorId = actorUser._id || actorUser.sub
+
     for (const member of projectMembers) {
-      if (member.user.toString() !== actor._id.toString()) {
+      if (member.user.toString() !== actorId.toString()) {
         await this.sendNotificationToUser(member.user.toString(), {
           type: NotificationType.TASK_STATUS_CHANGED,
-          actorId: actor._id.toString(),
-          actorName: actor.fullName,
+          actorId: actorId.toString(),
+          actorName: actorUser.fullName || actorUser.email || 'Unknown User',
           data: {
             taskId: task._id.toString(),
-            taskTitle: task.title,
+            taskTitle: task.name,
             projectId: task.project.toString(),
             spaceId: task.space.toString(),
             newStatus: newStatus,
@@ -467,7 +687,87 @@ export class NotificationService {
   }
 
   async getUnreadNotifications(userId: string) {
-    return this.db.notification.find({ recipientId: userId, isRead: false })
+    // Always return notifications where user is recipient OR actor
+    // This way:
+    // - Members see notifications they receive (recipientId)
+    // - Owners see notifications they receive (recipientId) + notifications from their actions (actorId)
+    return this.db.notification
+      .find({
+        $or: [
+          { recipientId: userId, isRead: false },
+          { actorId: userId, isRead: false },
+        ],
+      })
+      .sort({ createdAt: -1 })
+  }
+
+  async sendPendingNotifications(userId: string) {
+    try {
+      console.log(`📤 Sending pending notifications to user ${userId}`)
+
+      // Only send recent unread notifications (last 24 hours) to avoid spam
+      const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
+
+      const recentUnreadNotifications = await this.db.notification
+        .find({
+          recipientId: userId,
+          isRead: false,
+          createdAt: { $gte: oneDayAgo },
+        })
+        .sort({ createdAt: -1 })
+        .limit(10) // Limit to 10 most recent
+
+      console.log(
+        `📋 Found ${recentUnreadNotifications.length} pending notifications for user ${userId}`,
+      )
+
+      for (const notification of recentUnreadNotifications) {
+        // Get actor name if actorId exists
+        let actorName = 'Someone'
+        if (notification.actorId) {
+          try {
+            console.log(`🔍 Looking up actor with ID: ${notification.actorId}`)
+            const actor = await this.db.user.findById(notification.actorId)
+            console.log(`🔍 Found actor:`, {
+              id: actor?._id,
+              fullName: actor?.fullName,
+              email: actor?.email,
+            })
+            actorName = actor?.fullName || actor?.email || 'Someone'
+          } catch (error) {
+            console.error('❌ Error fetching actor for notification:', error)
+            actorName = 'Someone'
+          }
+        } else {
+          console.log(
+            `⚠️ No actorId found for notification ${notification._id}`,
+          )
+        }
+
+        console.log(`📤 Final actorName for pending notification: ${actorName}`)
+
+        const notificationToSend = {
+          ...notification.toObject(),
+          actorName: actorName,
+        }
+
+        // Check if gateway is available before sending
+        if (
+          this.gateway &&
+          typeof this.gateway.sendNotification === 'function'
+        ) {
+          this.gateway.sendNotification(userId, notificationToSend)
+        } else {
+          console.warn('⚠️ Gateway not available for pending notification')
+        }
+      }
+
+      console.log(
+        `✅ Sent ${recentUnreadNotifications.length} pending notifications to user ${userId}`,
+      )
+    } catch (error) {
+      console.error('❌ Error sending pending notifications:', error)
+    }
   }
 
   async markNotificationAsRead(notificationId: string) {
