@@ -263,26 +263,21 @@ export class NotificationService {
     const newMemberName =
       newMember?.fullName || newMember?.email || 'Unknown User'
 
-    // Notify other members (excluding actor and new member)
-    for (const member of members) {
-      if (
-        member.user.toString() !== actorId.toString() &&
-        member.user.toString() !== memberId
-      ) {
-        await this.sendNotificationToUser(member.user.toString(), {
-          type: NotificationType.ADD_MEMBER_TO_SPACE,
-          actorId: actorId.toString(),
-          actorName: actorName,
-          data: {
-            actorId: actorId.toString(),
-            spaceId: spaceId,
-            spaceName: space.name,
-            newMemberId: memberId,
-            newMemberName: newMemberName,
-          },
-        })
-      }
-    }
+    // Only notify the new member that they were added (not all other members)
+    await this.sendNotificationToUser(memberId, {
+      type: NotificationType.YOU_WERE_ADDED_TO_SPACE,
+      actorId: actorId.toString(),
+      actorName: actorName,
+      data: {
+        actorId: actorId.toString(),
+        spaceId: spaceId,
+        spaceName: space.name,
+        newMemberId: memberId,
+        newMemberName: newMemberName,
+      },
+    })
+
+    console.log(`✅ Space member addition notification sent only to new member: ${newMemberName}`)
   }
 
   async notifyMemberRemovedFromSpace(
@@ -438,26 +433,21 @@ export class NotificationService {
 
     const newMemberName = newMember?.fullName
 
-    // Notify other members
-    for (const member of members) {
-      if (
-        member.user.toString() !== actorId.toString() &&
-        member.user.toString() !== newMemberId
-      ) {
-        await this.sendNotificationToUser(member.user.toString(), {
-          type: NotificationType.ADD_MEMBER_TO_PROJECT,
-          actorId: actorId.toString(),
-          actorName: actorName,
-          data: {
-            actorId: actorId.toString(),
-            projectId: projectId,
-            projectName: project.name,
-            newMemberId: newMemberId,
-            newMemberName: newMemberName,
-          },
-        })
-      }
-    }
+    // Only notify the new member that they were added (not all other members)
+    await this.sendNotificationToUser(newMemberId, {
+      type: NotificationType.YOU_WERE_ADDED_TO_PROJECT,
+      actorId: actorId.toString(),
+      actorName: actorName,
+      data: {
+        actorId: actorId.toString(),
+        projectId: projectId,
+        projectName: project.name,
+        newMemberId: newMemberId,
+        newMemberName: newMemberName,
+      },
+    })
+
+    console.log(`✅ Project member addition notification sent only to new member: ${newMemberName}`)
   }
 
   async notifyMemberRemovedFromProject(
@@ -538,19 +528,14 @@ export class NotificationService {
       }
     }
 
-    const [projectMembers, spaceMembers, assigneeUser] = await Promise.all([
-      this.db.projectMember.find({ project: task.project }),
-      this.db.spaceMember.find({ space: task.space }),
-      task.assignee ? this.db.user.findById(task.assignee) : null,
-    ])
-
     const actorId = actorUser._id || actorUser.sub
     const actorName = actorUser.fullName || actorUser.email || 'Unknown User'
-    const assigneeName =
-      assigneeUser?.fullName || assigneeUser?.email || 'Unknown User'
 
-    // Notify assignee if different from creator
+    // Only notify assignee if different from creator (not all project members)
     if (task.assignee && task.assignee.toString() !== actorId.toString()) {
+      const assigneeUser = await this.db.user.findById(task.assignee)
+      const assigneeName = assigneeUser?.fullName || assigneeUser?.email || 'Unknown User'
+
       await this.sendNotificationToUser(task.assignee.toString(), {
         type: NotificationType.YOU_WERE_ASSIGNED_TASK,
         actorId: actorId.toString(),
@@ -560,10 +545,14 @@ export class NotificationService {
           taskTitle: task.name,
           projectId: task.project.toString(),
           spaceId: task.space.toString(),
-          assigneeId: task.assignee?.toString(), // nên thêm để frontend check
+          assigneeId: task.assignee?.toString(),
           assigneeName: assigneeName,
         },
       })
+
+      console.log(`✅ Task creation notification sent only to assignee: ${assigneeName}`)
+    } else {
+      console.log(`ℹ️ No task creation notification sent (assignee is creator or no assignee)`)
     }
   }
 
@@ -580,28 +569,66 @@ export class NotificationService {
       }
     }
 
-    const [projectMembers] = await Promise.all([
-      this.db.projectMember.find({ project: task.project }),
-    ])
-
     const actorId = actorUser._id || actorUser.sub
+    const actorName = actorUser.fullName || actorUser.email || 'Unknown User'
 
-    // Notify project members about task update
-    for (const member of projectMembers) {
-      if (member.user.toString() !== actorId.toString()) {
-        await this.sendNotificationToUser(member.user.toString(), {
-          type: NotificationType.UPDATE_TASK,
-          actorId: actorId.toString(),
-          actorName: actorUser.fullName,
-          data: {
-            taskId: task._id.toString(),
-            taskTitle: task.name,
-            projectId: task.project.toString(),
-            spaceId: task.space.toString(),
-            changes: changes,
-          },
+    // Logic:
+    // - If assignee updates → notify owner
+    // - If owner updates → notify assignee
+    // - If someone else updates → notify both owner and assignee
+
+    const notificationsToSend: Array<{recipientId: string, reason: string}> = []
+
+    // If actor is assignee, notify owner
+    if (task.assignee && task.assignee.toString() === actorId.toString() && task.owner.toString() !== actorId.toString()) {
+      notificationsToSend.push({
+        recipientId: task.owner.toString(),
+        reason: 'assignee updated task, notifying owner'
+      })
+    }
+    // If actor is owner, notify assignee
+    else if (task.owner.toString() === actorId.toString() && task.assignee && task.assignee.toString() !== actorId.toString()) {
+      notificationsToSend.push({
+        recipientId: task.assignee.toString(),
+        reason: 'owner updated task, notifying assignee'
+      })
+    }
+    // If actor is neither owner nor assignee, notify both
+    else if (task.owner.toString() !== actorId.toString() && (!task.assignee || task.assignee.toString() !== actorId.toString())) {
+      if (task.owner) {
+        notificationsToSend.push({
+          recipientId: task.owner.toString(),
+          reason: 'third party updated task, notifying owner'
         })
       }
+      if (task.assignee && task.assignee.toString() !== task.owner.toString()) {
+        notificationsToSend.push({
+          recipientId: task.assignee.toString(),
+          reason: 'third party updated task, notifying assignee'
+        })
+      }
+    }
+
+    // Send notifications
+    for (const notification of notificationsToSend) {
+      await this.sendNotificationToUser(notification.recipientId, {
+        type: NotificationType.UPDATE_TASK,
+        actorId: actorId.toString(),
+        actorName: actorName,
+        data: {
+          taskId: task._id.toString(),
+          taskTitle: task.name,
+          projectId: task.project.toString(),
+          spaceId: task.space.toString(),
+          changes: changes,
+        },
+      })
+
+      console.log(`✅ Task update notification sent: ${notification.reason}`)
+    }
+
+    if (notificationsToSend.length === 0) {
+      console.log(`ℹ️ No task update notifications sent (actor is both owner and assignee, or no owner/assignee)`)
     }
   }
 
@@ -662,27 +689,66 @@ export class NotificationService {
       }
     }
 
-    const projectMembers = await this.db.projectMember.find({
-      project: task.project,
-    })
-
     const actorId = actorUser._id || actorUser.sub
+    const actorName = actorUser.fullName || actorUser.email || 'Unknown User'
 
-    for (const member of projectMembers) {
-      if (member.user.toString() !== actorId.toString()) {
-        await this.sendNotificationToUser(member.user.toString(), {
-          type: NotificationType.TASK_STATUS_CHANGED,
-          actorId: actorId.toString(),
-          actorName: actorUser.fullName || actorUser.email || 'Unknown User',
-          data: {
-            taskId: task._id.toString(),
-            taskTitle: task.name,
-            projectId: task.project.toString(),
-            spaceId: task.space.toString(),
-            newStatus: newStatus,
-          },
+    // Logic:
+    // - If assignee changes status → notify owner
+    // - If owner changes status → notify assignee
+    // - If someone else changes status → notify both owner and assignee
+
+    const notificationsToSend: Array<{recipientId: string, reason: string}> = []
+
+    // If actor is assignee, notify owner
+    if (task.assignee && task.assignee.toString() === actorId.toString() && task.owner.toString() !== actorId.toString()) {
+      notificationsToSend.push({
+        recipientId: task.owner.toString(),
+        reason: 'assignee changed task status, notifying owner'
+      })
+    }
+    // If actor is owner, notify assignee
+    else if (task.owner.toString() === actorId.toString() && task.assignee && task.assignee.toString() !== actorId.toString()) {
+      notificationsToSend.push({
+        recipientId: task.assignee.toString(),
+        reason: 'owner changed task status, notifying assignee'
+      })
+    }
+    // If actor is neither owner nor assignee, notify both
+    else if (task.owner.toString() !== actorId.toString() && (!task.assignee || task.assignee.toString() !== actorId.toString())) {
+      if (task.owner) {
+        notificationsToSend.push({
+          recipientId: task.owner.toString(),
+          reason: 'third party changed task status, notifying owner'
         })
       }
+      if (task.assignee && task.assignee.toString() !== task.owner.toString()) {
+        notificationsToSend.push({
+          recipientId: task.assignee.toString(),
+          reason: 'third party changed task status, notifying assignee'
+        })
+      }
+    }
+
+    // Send notifications
+    for (const notification of notificationsToSend) {
+      await this.sendNotificationToUser(notification.recipientId, {
+        type: NotificationType.TASK_STATUS_CHANGED,
+        actorId: actorId.toString(),
+        actorName: actorName,
+        data: {
+          taskId: task._id.toString(),
+          taskTitle: task.name,
+          projectId: task.project.toString(),
+          spaceId: task.space.toString(),
+          newStatus: newStatus,
+        },
+      })
+
+      console.log(`✅ Task status change notification sent: ${notification.reason}`)
+    }
+
+    if (notificationsToSend.length === 0) {
+      console.log(`ℹ️ No task status change notifications sent (actor is both owner and assignee, or no owner/assignee)`)
     }
   }
 
