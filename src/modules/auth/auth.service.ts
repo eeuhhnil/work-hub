@@ -34,7 +34,7 @@ export class AuthService {
   ) {}
 
   async registerLocal(registerDto: RegisterDto) {
-    const { email, password, fullName } = registerDto
+    const { email, password, fullName, role } = registerDto
     const user = await this.db.user.exists({ email })
     if (user) throw new ConflictException('USER_EXISTS')
 
@@ -43,6 +43,7 @@ export class AuthService {
       username: await this.generateUniqueUsername(fullName),
       password: bcrypt.hashSync(password, 10),
       fullName,
+      role,
       isActive: true,
     })
 

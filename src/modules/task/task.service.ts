@@ -1,11 +1,11 @@
-import { Injectable } from '@nestjs/common'
+import { Injectable, ForbiddenException } from '@nestjs/common'
 import { DbService } from '../../common/db/db.service'
 import { Task } from '../../common/db/models'
 import { IdLike } from '../../common/types'
-import { QueryTaskDto, TaskStatsDto } from './dtos'
+import { QueryTaskDto, TaskStatsDto, UpdateTaskDto } from './dtos'
 import { FilterQuery } from 'mongoose'
 import { NotificationService } from '../notification/notification.service'
-import { ProjectRole, TaskStatus } from '../../common/enums'
+import { ProjectRole, TaskStatus, SpaceRole } from '../../common/enums'
 
 @Injectable()
 export class TaskService {
@@ -91,7 +91,6 @@ export class TaskService {
     )
 
     // Send notification if actor is provided
-    if (actor && updated) {
       await this.notificationService.notifyUpdatedTask(updated, actor, payload)
 
       // Special notification for status changes
@@ -106,7 +105,7 @@ export class TaskService {
           actor,
         )
       }
-    }
+
 
     return updated
   }
@@ -125,6 +124,83 @@ export class TaskService {
     )
 
     return this.db.task.deleteOne({ _id: taskId })
+  }
+
+  /**
+   * Determine user permissions for task operations
+   */
+  determineTaskPermissions(
+    task: Task,
+    userId: string,
+    spaceMemberRole: SpaceRole,
+    projectMemberRole: ProjectRole,
+  ) {
+    const isTaskOwner = (task.owner as string) === userId
+    const isTaskAssignee = (task.assignee as string) === userId
+    const isSpaceOwner = spaceMemberRole === SpaceRole.OWNER
+    const isProjectOwner = projectMemberRole === ProjectRole.OWNER
+
+    // Check if user has any relation to the task
+    const hasTaskAccess = isTaskOwner || isTaskAssignee || isSpaceOwner || isProjectOwner
+
+    if (!hasTaskAccess) {
+      throw new ForbiddenException('Permission denied')
+    }
+
+    return {
+      isTaskOwner,
+      isTaskAssignee,
+      isSpaceOwner,
+      isProjectOwner,
+      canUpdateAllFields: isSpaceOwner || isProjectOwner,
+      canUpdateAllExceptStatus: isTaskOwner && !isSpaceOwner && !isProjectOwner,
+      canUpdateStatusAndFiles: isTaskAssignee && !isTaskOwner && !isSpaceOwner && !isProjectOwner,
+    }
+  }
+
+  /**
+   * Filter update payload based on user permissions
+   */
+  filterUpdatePayload(
+    payload: UpdateTaskDto,
+    permissions: ReturnType<typeof this.determineTaskPermissions>,
+  ) {
+    const { canUpdateAllFields, canUpdateAllExceptStatus, canUpdateStatusAndFiles } = permissions
+
+    if (canUpdateAllFields) {
+      // Space/Project owners can update everything
+      return payload
+    }
+
+    if (canUpdateAllExceptStatus) {
+      // Task owners can update everything except status
+      const { status, ...allowedFields } = payload
+
+      if (status !== undefined) {
+        throw new ForbiddenException(
+          'As task owner, you cannot update task status. Only assignee can update status.'
+        )
+      }
+
+      return allowedFields
+    }
+
+    if (canUpdateStatusAndFiles) {
+      // Task assignees can only update status and attachments
+      const { status, attachments, ...otherFields } = payload
+
+      // Check if assignee is trying to update forbidden fields
+      const forbiddenFields = Object.keys(otherFields).filter(key => otherFields[key] !== undefined)
+      if (forbiddenFields.length > 0) {
+        throw new ForbiddenException(
+          `As task assignee, you can only update status and upload files. Cannot update: ${forbiddenFields.join(', ')}`
+        )
+      }
+
+      return { status, attachments }
+    }
+
+    throw new ForbiddenException('Permission denied')
   }
 
   async getUserTaskStats(userId: string): Promise<TaskStatsDto> {

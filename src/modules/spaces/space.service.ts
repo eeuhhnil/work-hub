@@ -117,6 +117,23 @@ export class SpaceService {
     if (!space)
       throw new NotFoundException(`Space with id ${spaceId} not found`)
 
+    // Cascade delete: Get all projects in this space
+    const projects = await this.db.project.find({ space: spaceId })
+
+    // Delete all tasks in all projects of this space
+    for (const project of projects) {
+      await this.db.task.deleteMany({ project: project._id })
+    }
+
+    // Delete all project members in this space
+    for (const project of projects) {
+      await this.db.projectMember.deleteMany({ project: project._id })
+    }
+
+    // Delete all projects in this space
+    await this.db.project.deleteMany({ space: spaceId })
+
+    // Delete all space members
     await this.db.spaceMember.deleteMany({ space: spaceId })
 
     return this.db.space.deleteOne({ _id: spaceId })

@@ -3,6 +3,8 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  forwardRef,
+  Inject,
 } from '@nestjs/common'
 import { FilterQuery, PaginateOptions } from 'mongoose'
 import { DbService } from '../../common/db/db.service'
@@ -12,12 +14,15 @@ import { SpaceMember } from '../../common/db/models'
 import { PaginationDTO } from '../../common/dtos'
 import { QuerySpacesDto } from './dtos'
 import { NotificationService } from '../notification/notification.service'
+import { ProjectMemberService } from '../project/project-member.service'
 
 @Injectable()
 export class SpaceMemberService {
   constructor(
     private readonly db: DbService,
     private readonly notificationService: NotificationService,
+    @Inject(forwardRef(() => ProjectMemberService))
+    private readonly projectMemberService: ProjectMemberService,
   ) {}
 
   async createOne(
@@ -76,6 +81,18 @@ export class SpaceMemberService {
   async deleteOne(spaceMemberId: IdLike<string>, actorId: string) {
     const spaceMember = await this.db.spaceMember.findById(spaceMemberId)
     if (!spaceMember) throw new NotFoundException('Space member not found')
+
+    // Cascade delete: Remove user from all projects in this space
+    const projectsInSpace = await this.db.project.find({ space: spaceMember.space })
+    for (const project of projectsInSpace) {
+      const projectMember = await this.db.projectMember.findOne({
+        project: project._id,
+        user: spaceMember.user,
+      })
+      if (projectMember) {
+        await this.projectMemberService.deleteOne(projectMember._id.toString(), actorId)
+      }
+    }
 
     await this.notificationService.notifyMemberRemovedFromSpace(
       spaceMember.space.toString(),

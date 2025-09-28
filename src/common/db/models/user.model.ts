@@ -50,7 +50,7 @@ export class User {
     type: String,
     enum: Object.values(SystemRole),
     required: false,
-    default: SystemRole.USER,
+    default: SystemRole.EMPLOYEE,
   })
   role?: SystemRole
 

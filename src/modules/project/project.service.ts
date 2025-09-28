@@ -257,6 +257,12 @@ export class ProjectService {
     if (!project)
       throw new NotFoundException(`Project with id ${projectId} not found`)
 
+    // Cascade delete: Delete all tasks in this project
+    await this.db.task.deleteMany({ project: projectId })
+
+    // Delete all project members
+    await this.db.projectMember.deleteMany({ project: projectId })
+
     return this.db.project.deleteOne({ _id: projectId })
   }
 

@@ -35,6 +35,8 @@ import {
   UserProjectsProgressResponseDto,
 } from './dtos/dtos'
 import { FileInterceptor } from '@nestjs/platform-express'
+import {UserRoles} from "../auth/decorators/system-role.decorator";
+import {SystemRole} from "../../common/enums";
 
 @Controller('projects')
 @ApiTags('Projects')
@@ -47,6 +49,7 @@ export class ProjectController {
     private readonly spaceMember: SpaceMemberService,
   ) {}
 
+  @UserRoles(SystemRole.PROJECT_MANAGER)
   @Post()
   @ApiOperation({ summary: 'Create project' })
   async createOne(
@@ -173,6 +176,7 @@ export class ProjectController {
     return await this.project.updateOne(projectId, payload, authPayload.sub)
   }
 
+  @UserRoles(SystemRole.PROJECT_MANAGER)
   @Delete(':projectId')
   @ApiOperation({ summary: 'Delete project by id' })
   async deleteOne(

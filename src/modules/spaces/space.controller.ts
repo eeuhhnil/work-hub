@@ -25,6 +25,8 @@ import {
   QueryProjectDto,
   ProjectsWithMemberCountResponseDto,
 } from '../project/dtos/dtos'
+import {UserRoles} from "../auth/decorators/system-role.decorator";
+import {SystemRole} from "../../common/enums";
 
 @Controller('spaces')
 @ApiTags('Spaces')
@@ -45,6 +47,7 @@ export class SpaceController {
     return await this.space.findUserSpaces(authPayload.sub, query)
   }
 
+  @UserRoles(SystemRole.PROJECT_MANAGER)
   @Post()
   @ApiOperation({ summary: 'Create a new space' })
   async createOne(
@@ -68,6 +71,7 @@ export class SpaceController {
     return space
   }
 
+  @UserRoles(SystemRole.PROJECT_MANAGER)
   @Put(':spaceId')
   @ApiOperation({ summary: 'Update one space' })
   async updateOne(
@@ -131,6 +135,7 @@ export class SpaceController {
     }
   }
 
+  @UserRoles(SystemRole.PROJECT_MANAGER)
   @Delete(':spaceId')
   @ApiOperation({ summary: 'Delete one space' })
   async deleteOne(

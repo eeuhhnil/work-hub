@@ -3,6 +3,8 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  forwardRef,
+  Inject,
 } from '@nestjs/common'
 import { FilterQuery, PaginateOptions } from 'mongoose'
 import { DbService } from '../../common/db/db.service'
@@ -11,12 +13,15 @@ import { IdLike } from '../../common/types'
 import { ProjectMember } from '../../common/db/models'
 import { ProjectRole, SpaceRole } from '../../common/enums'
 import { NotificationService } from '../notification/notification.service'
+import { SpaceMemberService } from '../spaces/space-member.service'
 
 @Injectable()
 export class ProjectMemberService {
   constructor(
     private readonly db: DbService,
     private readonly notificationService: NotificationService,
+    @Inject(forwardRef(() => SpaceMemberService))
+    private readonly spaceMemberService: SpaceMemberService,
   ) {}
 
   async findOne(projectMemberId: IdLike<string>) {
@@ -47,7 +52,7 @@ export class ProjectMemberService {
     ownerId: string,
   ) {
     const [project, member, existing] = await Promise.all([
-      this.db.project.exists({ _id: projectId }),
+      this.db.project.findById(projectId),
       this.db.user.exists({ _id: memberId }),
       this.db.projectMember.exists({ user: memberId, project: projectId }),
     ])
@@ -55,6 +60,9 @@ export class ProjectMemberService {
     if (!project) throw new NotFoundException('Project not found')
     if (!member) throw new NotFoundException('Member not found')
     if (existing) throw new ConflictException('User already project member')
+
+    // Validate that user is a member of the space before adding to project
+    await this.spaceMemberService.checkMembership(project.space.toString(), memberId.toString())
 
     const newMember = await this.db.projectMember.create({
       user: memberId,

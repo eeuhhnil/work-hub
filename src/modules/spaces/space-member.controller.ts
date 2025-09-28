@@ -25,6 +25,7 @@ export class SpaceMemberController {
     private readonly userService: UserService,
   ) {}
 
+
   @Post()
   @ApiOperation({ summary: 'Add member to space' })
   async addMemberToSpace(

@@ -35,12 +35,13 @@ import {
 import { AuthUser } from '../auth/decorators'
 import {
   ProjectRole,
-  SpaceRole,
+  SpaceRole, SystemRole,
   TaskPriority,
   TaskStatus,
 } from '../../common/enums'
 import { StorageService } from '../storage/storage.service'
 import { v4 as uuidv4 } from 'uuid'
+import {UserRoles} from "../auth/decorators/system-role.decorator";
 
 @Controller('tasks')
 @ApiTags('Tasks')
@@ -288,6 +289,8 @@ export class TaskController {
       },
     }),
   )
+
+  @UserRoles(SystemRole.PROJECT_MANAGER)
   async createOne(
     @AuthUser() authPayload: AuthPayload,
     @Body() payload: CreateTaskDto,
@@ -431,6 +434,8 @@ export class TaskController {
       },
     }),
   )
+
+  @UserRoles(SystemRole.PROJECT_MANAGER)
   async createTaskInProject(
     @AuthUser() authPayload: AuthPayload,
     @Param('spaceId') spaceId: string,
@@ -523,6 +528,7 @@ export class TaskController {
     return task
   }
 
+  @UserRoles(SystemRole.PROJECT_MANAGER, SystemRole.EMPLOYEE)
   @Put(':taskId')
   @ApiOperation({ summary: 'Update one task' })
   @ApiConsumes('multipart/form-data')
@@ -635,14 +641,15 @@ export class TaskController {
         : null,
     ])
 
-    if (
-      (task.owner as string) !== sub &&
-      (task.assignee as string) !== sub &&
-      spaceMember.role !== SpaceRole.OWNER &&
-      projectMember.role !== ProjectRole.OWNER
-    ) {
-      throw new ForbiddenException(`Permission denied`)
-    }
+    // Use service to determine permissions and filter payload
+    const permissions = this.taskService.determineTaskPermissions(
+      task,
+      sub,
+      spaceMember.role,
+      projectMember.role,
+    )
+
+    const filteredPayload = this.taskService.filterUpdatePayload(payload, permissions)
 
     // Process uploaded files
     let newAttachments: Array<{
@@ -682,7 +689,7 @@ export class TaskController {
     }
 
     // Process existing attachments and combine with new ones
-    const processedPayload = { ...payload }
+    const processedPayload = { ...filteredPayload }
     let existingAttachments: Array<{
       filename: string
       originalName: string
@@ -692,12 +699,12 @@ export class TaskController {
       uploadedAt: Date
     }> = []
 
-    if (payload.attachments) {
+    if (filteredPayload.attachments) {
       try {
         // If attachments is a string (from FormData), parse it
-        const attachmentsData = typeof payload.attachments === 'string'
-          ? JSON.parse(payload.attachments)
-          : payload.attachments
+        const attachmentsData = typeof filteredPayload.attachments === 'string'
+          ? JSON.parse(filteredPayload.attachments)
+          : filteredPayload.attachments
 
         existingAttachments = Array.isArray(attachmentsData)
           ? attachmentsData.map((attachment) => ({
@@ -718,15 +725,26 @@ export class TaskController {
     const finalAttachments = [...existingAttachments, ...newAttachments]
 
     // Create final payload with proper types, excluding attachments
-    const { attachments: _, ...payloadWithoutAttachments } = processedPayload
+    const { attachments: _, ...payloadWithoutAttachments } = filteredPayload
+
+    // Prepare final update payload
+    const finalUpdatePayload: any = {
+      ...payloadWithoutAttachments,
+      attachments: finalAttachments,
+    }
+
+    // Only set completedAt if status is being updated to COMPLETED
+    const statusValue = (filteredPayload as any).status
+    if (statusValue === TaskStatus.COMPLETED) {
+      finalUpdatePayload.completedAt = new Date()
+    } else if (statusValue && statusValue !== TaskStatus.COMPLETED) {
+      // If status is being changed to something other than COMPLETED, clear completedAt
+      finalUpdatePayload.completedAt = undefined
+    }
 
     const updatedTask = await this.taskService.updateOne(
       taskId,
-      {
-        completedAt: status === TaskStatus.COMPLETED ? new Date() : undefined,
-        ...payloadWithoutAttachments,
-        attachments: finalAttachments,
-      },
+      finalUpdatePayload,
       authPayload,
     )
     await task.populate('space project assignee owner')
