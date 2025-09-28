@@ -42,7 +42,7 @@ import { TaskModule } from './modules/task/task.module'
           secure: true,
           auth: {
             user: configService.get<string>('MAIL_USER'),
-            pass: configService.get<string>('MAIL_PASSWORD'),
+            pass: configService.get<string>('MAIL_PASS'),
           },
         },
         defaults: {
