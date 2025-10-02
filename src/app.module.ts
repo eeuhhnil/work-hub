@@ -13,6 +13,7 @@ import { DbModule } from './common/db/db.module'
 import { SpaceModule } from './modules/spaces/space.module'
 import { ProjectModule } from './modules/project/project.module'
 import { TaskModule } from './modules/task/task.module'
+import { BOMModule } from './modules/bom/bom.module'
 // import { UploadModule } from './modules/upload/upload.module'
 
 @Module({
@@ -60,6 +61,7 @@ import { TaskModule } from './modules/task/task.module'
     SpaceModule,
     ProjectModule,
     TaskModule,
+    BOMModule,
     // UploadModule,
   ],
   controllers: [],

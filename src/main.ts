@@ -45,6 +45,7 @@ async function bootstrap() {
       `http://localhost:${config.get('PORT')}`,
       `Development API[PORT=${config.get('PORT')}]`,
     )
+    .addServer(`https://workhub-api.eeuhhnil.work`, 'Production API')
     .setVersion('1.0.0')
     .addBearerAuth({
       description: `Please enter token in following format: Bearer <JWT>`,
