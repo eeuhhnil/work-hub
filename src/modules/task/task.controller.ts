@@ -31,17 +31,21 @@ import {
   QueryTaskDto,
   UpdateTaskDto,
   TaskStatsDto,
+  ApproveTaskDto,
+  RejectTaskDto,
+  QueryPendingApprovalTasksDto,
 } from './dtos'
 import { AuthUser } from '../auth/decorators'
 import {
   ProjectRole,
-  SpaceRole, SystemRole,
+  SpaceRole,
+  SystemRole,
   TaskPriority,
   TaskStatus,
 } from '../../common/enums'
 import { StorageService } from '../storage/storage.service'
 import { v4 as uuidv4 } from 'uuid'
-import {UserRoles} from "../auth/decorators/system-role.decorator";
+import { UserRoles } from '../auth/decorators/system-role.decorator'
 
 @Controller('tasks')
 @ApiTags('Tasks')
@@ -101,7 +105,8 @@ export class TaskController {
 
   @Get('stats/space/:spaceId')
   @ApiOperation({
-    summary: 'Lấy thống kê số lượng task theo trạng thái của user trong một space cụ thể',
+    summary:
+      'Lấy thống kê số lượng task theo trạng thái của user trong một space cụ thể',
     description:
       'Trả về tổng hợp số lượng task theo trạng thái (pending, completed, processing, overdue) cho các project trong space được chỉ định. Nếu là owner thì lấy hết số lượng, còn member thì chỉ lấy những task được assign.',
   })
@@ -117,7 +122,10 @@ export class TaskController {
     // Check if user is member of the space
     await this.spaceMember.checkMembership(spaceId, authPayload.sub)
 
-    return await this.taskService.getUserTaskStatsBySpace(authPayload.sub, spaceId)
+    return await this.taskService.getUserTaskStatsBySpace(
+      authPayload.sub,
+      spaceId,
+    )
   }
 
   @Post('upload-files')
@@ -289,7 +297,6 @@ export class TaskController {
       },
     }),
   )
-
   @UserRoles(SystemRole.PROJECT_MANAGER)
   async createOne(
     @AuthUser() authPayload: AuthPayload,
@@ -434,7 +441,6 @@ export class TaskController {
       },
     }),
   )
-
   @UserRoles(SystemRole.PROJECT_MANAGER)
   async createTaskInProject(
     @AuthUser() authPayload: AuthPayload,
@@ -503,6 +509,19 @@ export class TaskController {
         ...taskData,
       },
       authPayload,
+    )
+  }
+
+  @Get('pending-approval')
+  @ApiOperation({ summary: 'Get tasks pending approval for PM/Project Owner' })
+  @UserRoles(SystemRole.PROJECT_MANAGER, SystemRole.EMPLOYEE)
+  async getPendingApprovalTasks(
+    @AuthUser() authPayload: AuthPayload,
+    @Query() query: QueryPendingApprovalTasksDto,
+  ) {
+    return await this.taskService.findPendingApprovalTasks(
+      authPayload.sub,
+      query,
     )
   }
 
@@ -649,7 +668,10 @@ export class TaskController {
       projectMember.role,
     )
 
-    const filteredPayload = this.taskService.filterUpdatePayload(payload, permissions)
+    const filteredPayload = this.taskService.filterUpdatePayload(
+      payload,
+      permissions,
+    )
 
     // Process uploaded files
     let newAttachments: Array<{
@@ -702,9 +724,10 @@ export class TaskController {
     if (filteredPayload.attachments) {
       try {
         // If attachments is a string (from FormData), parse it
-        const attachmentsData = typeof filteredPayload.attachments === 'string'
-          ? JSON.parse(filteredPayload.attachments)
-          : filteredPayload.attachments
+        const attachmentsData =
+          typeof filteredPayload.attachments === 'string'
+            ? JSON.parse(filteredPayload.attachments)
+            : filteredPayload.attachments
 
         existingAttachments = Array.isArray(attachmentsData)
           ? attachmentsData.map((attachment) => ({
@@ -781,6 +804,44 @@ export class TaskController {
 
     return {
       message: 'Deleted task successfully!',
+    }
+  }
+
+  @Post(':taskId/approve')
+  @ApiOperation({ summary: 'Approve a task (PM/Project Owner only)' })
+  @UserRoles(SystemRole.PROJECT_MANAGER)
+  async approveTask(
+    @AuthUser() authPayload: AuthPayload,
+    @Param('taskId') taskId: string,
+    @Body() payload: ApproveTaskDto,
+  ) {
+    const updatedTask = await this.taskService.approveTask(
+      taskId,
+      payload,
+      authPayload,
+    )
+    return {
+      message: 'Task approved successfully!',
+      task: updatedTask,
+    }
+  }
+
+  @Post(':taskId/reject')
+  @ApiOperation({ summary: 'Reject a task (PM/Project Owner only)' })
+  @UserRoles(SystemRole.PROJECT_MANAGER)
+  async rejectTask(
+    @AuthUser() authPayload: AuthPayload,
+    @Param('taskId') taskId: string,
+    @Body() payload: RejectTaskDto,
+  ) {
+    const updatedTask = await this.taskService.rejectTask(
+      taskId,
+      payload,
+      authPayload,
+    )
+    return {
+      message: 'Task rejected successfully!',
+      task: updatedTask,
     }
   }
 }

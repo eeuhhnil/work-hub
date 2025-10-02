@@ -25,8 +25,8 @@ import {
   QueryProjectDto,
   ProjectsWithMemberCountResponseDto,
 } from '../project/dtos/dtos'
-import {UserRoles} from "../auth/decorators/system-role.decorator";
-import {SystemRole} from "../../common/enums";
+import { UserRoles } from '../auth/decorators/system-role.decorator'
+import { SystemRole } from '../../common/enums'
 
 @Controller('spaces')
 @ApiTags('Spaces')

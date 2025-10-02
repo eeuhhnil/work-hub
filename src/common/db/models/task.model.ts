@@ -80,6 +80,38 @@ export class Task {
   dueDate?: Date
 
   @Prop({
+    type: String,
+    ref: 'User',
+    required: false,
+  })
+  approvedBy?: IdLike<User>
+
+  @Prop({
+    type: Date,
+    required: false,
+  })
+  approvedAt?: Date
+
+  @Prop({
+    type: String,
+    ref: 'User',
+    required: false,
+  })
+  rejectedBy?: IdLike<User>
+
+  @Prop({
+    type: Date,
+    required: false,
+  })
+  rejectedAt?: Date
+
+  @Prop({
+    type: String,
+    required: false,
+  })
+  reviewComment?: string
+
+  @Prop({
     type: [
       {
         filename: { type: String, required: true },

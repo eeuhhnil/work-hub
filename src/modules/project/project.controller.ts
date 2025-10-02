@@ -35,8 +35,8 @@ import {
   UserProjectsProgressResponseDto,
 } from './dtos/dtos'
 import { FileInterceptor } from '@nestjs/platform-express'
-import {UserRoles} from "../auth/decorators/system-role.decorator";
-import {SystemRole} from "../../common/enums";
+import { UserRoles } from '../auth/decorators/system-role.decorator'
+import { SystemRole } from '../../common/enums'
 
 @Controller('projects')
 @ApiTags('Projects')

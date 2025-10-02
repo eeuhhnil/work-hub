@@ -94,13 +94,13 @@ export class ProjectService {
           project: projectDoc._id,
         })
 
-        // đếm task & task completed
+        // đếm task & task completed (chỉ tính task đã được PM approve)
         const totalTasks = await this.db.task.countDocuments({
           project: projectDoc._id,
         })
         const completedTasks = await this.db.task.countDocuments({
           project: projectDoc._id,
-          status: 'completed',
+          status: TaskStatus.COMPLETED, // Chỉ tính task đã được PM approve
         })
 
         const progress =

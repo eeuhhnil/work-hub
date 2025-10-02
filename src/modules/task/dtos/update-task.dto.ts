@@ -1,7 +1,13 @@
 import { ApiPropertyOptional, OmitType, PartialType } from '@nestjs/swagger'
 import { CreateTaskDto, TaskAttachmentDto } from './create-task.dto'
 import { TaskStatus, TaskPriority } from '../../../common/enums'
-import { IsEnum, IsOptional, IsArray, ValidateNested, IsString } from 'class-validator'
+import {
+  IsEnum,
+  IsOptional,
+  IsArray,
+  ValidateNested,
+  IsString,
+} from 'class-validator'
 import { Type } from 'class-transformer'
 
 export class UpdateTaskDto extends PartialType(
@@ -19,9 +25,12 @@ export class UpdateTaskDto extends PartialType(
 
   @ApiPropertyOptional({
     oneOf: [
-      { type: 'array', items: { $ref: '#/components/schemas/TaskAttachmentDto' } },
-      { type: 'string', description: 'JSON string of attachments array' }
-    ]
+      {
+        type: 'array',
+        items: { $ref: '#/components/schemas/TaskAttachmentDto' },
+      },
+      { type: 'string', description: 'JSON string of attachments array' },
+    ],
   })
   @IsOptional()
   attachments?: TaskAttachmentDto[] | string

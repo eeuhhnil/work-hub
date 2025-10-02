@@ -62,7 +62,10 @@ export class ProjectMemberService {
     if (existing) throw new ConflictException('User already project member')
 
     // Validate that user is a member of the space before adding to project
-    await this.spaceMemberService.checkMembership(project.space.toString(), memberId.toString())
+    await this.spaceMemberService.checkMembership(
+      project.space.toString(),
+      memberId.toString(),
+    )
 
     const newMember = await this.db.projectMember.create({
       user: memberId,

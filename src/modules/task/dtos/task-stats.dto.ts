@@ -7,6 +7,9 @@ export class TaskStatsDto {
   @ApiProperty({ description: 'Số lượng task đang xử lý' })
   processing: number
 
+  @ApiProperty({ description: 'Số lượng task chờ phê duyệt' })
+  pendingApproval: number
+
   @ApiProperty({ description: 'Số lượng task đã hoàn thành' })
   completed: number
 

@@ -1,11 +1,28 @@
-import { Injectable, ForbiddenException } from '@nestjs/common'
+import {
+  Injectable,
+  ForbiddenException,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common'
 import { DbService } from '../../common/db/db.service'
 import { Task } from '../../common/db/models'
 import { IdLike } from '../../common/types'
-import { QueryTaskDto, TaskStatsDto, UpdateTaskDto } from './dtos'
+import {
+  QueryTaskDto,
+  TaskStatsDto,
+  UpdateTaskDto,
+  ApproveTaskDto,
+  RejectTaskDto,
+  QueryPendingApprovalTasksDto,
+} from './dtos'
 import { FilterQuery } from 'mongoose'
 import { NotificationService } from '../notification/notification.service'
-import { ProjectRole, TaskStatus, SpaceRole } from '../../common/enums'
+import {
+  ProjectRole,
+  TaskStatus,
+  SpaceRole,
+  SystemRole,
+} from '../../common/enums'
 
 @Injectable()
 export class TaskService {
@@ -82,6 +99,50 @@ export class TaskService {
     actor?: any,
   ) {
     const originalTask = await this.db.task.findById(taskId)
+
+    // Special handling: If Employee tries to submit task for approval
+    // They should update status to PENDING_APPROVAL (not COMPLETED)
+    // Only PM can set status to COMPLETED through approve action
+    if (payload.status === TaskStatus.COMPLETED && originalTask) {
+      // Check if actor is the assignee (Employee) and not PM/Owner
+      const actorId = actor?._id || actor?.sub
+      const user = await this.db.user.findById(actorId)
+
+      const isAssignee =
+        originalTask.assignee &&
+        originalTask.assignee.toString() === actorId?.toString()
+      const isPM = user?.role === SystemRole.PROJECT_MANAGER
+      const isProjectOwner = await this.db.projectMember.findOne({
+        user: actorId,
+        project: originalTask.project,
+        role: ProjectRole.OWNER,
+      })
+
+      // If assignee (not PM/Owner) tries to set COMPLETED, convert to PENDING_APPROVAL
+      if (isAssignee && !isPM && !isProjectOwner) {
+        payload.status = TaskStatus.PENDING_APPROVAL
+
+        // Update the task
+        const updated = await this.db.task.findOneAndUpdate(
+          { _id: taskId },
+          payload,
+          { new: true },
+        )
+
+        // Send notification to PM about pending approval
+        await this.notificationService.notifyTaskPendingApproval(updated, actor)
+
+        // Send regular update notification
+        await this.notificationService.notifyUpdatedTask(
+          updated,
+          actor,
+          payload,
+        )
+
+        return updated
+      }
+    }
+
     const updated = await this.db.task.findOneAndUpdate(
       { _id: taskId },
       payload,
@@ -91,21 +152,20 @@ export class TaskService {
     )
 
     // Send notification if actor is provided
-      await this.notificationService.notifyUpdatedTask(updated, actor, payload)
+    await this.notificationService.notifyUpdatedTask(updated, actor, payload)
 
-      // Special notification for status changes
-      if (
-        payload.status &&
-        originalTask &&
-        payload.status !== originalTask.status
-      ) {
-        await this.notificationService.notifyTaskStatusChanged(
-          updated,
-          payload.status,
-          actor,
-        )
-      }
-
+    // Special notification for status changes
+    if (
+      payload.status &&
+      originalTask &&
+      payload.status !== originalTask.status
+    ) {
+      await this.notificationService.notifyTaskStatusChanged(
+        updated,
+        payload.status,
+        actor,
+      )
+    }
 
     return updated
   }
@@ -141,7 +201,8 @@ export class TaskService {
     const isProjectOwner = projectMemberRole === ProjectRole.OWNER
 
     // Check if user has any relation to the task
-    const hasTaskAccess = isTaskOwner || isTaskAssignee || isSpaceOwner || isProjectOwner
+    const hasTaskAccess =
+      isTaskOwner || isTaskAssignee || isSpaceOwner || isProjectOwner
 
     if (!hasTaskAccess) {
       throw new ForbiddenException('Permission denied')
@@ -154,7 +215,8 @@ export class TaskService {
       isProjectOwner,
       canUpdateAllFields: isSpaceOwner || isProjectOwner,
       canUpdateAllExceptStatus: isTaskOwner && !isSpaceOwner && !isProjectOwner,
-      canUpdateStatusAndFiles: isTaskAssignee && !isTaskOwner && !isSpaceOwner && !isProjectOwner,
+      canUpdateStatusAndFiles:
+        isTaskAssignee && !isTaskOwner && !isSpaceOwner && !isProjectOwner,
     }
   }
 
@@ -165,10 +227,14 @@ export class TaskService {
     payload: UpdateTaskDto,
     permissions: ReturnType<typeof this.determineTaskPermissions>,
   ) {
-    const { canUpdateAllFields, canUpdateAllExceptStatus, canUpdateStatusAndFiles } = permissions
+    const {
+      canUpdateAllFields,
+      canUpdateAllExceptStatus,
+      canUpdateStatusAndFiles,
+    } = permissions
 
     if (canUpdateAllFields) {
-      // Space/Project owners can update everything
+      // Space/Project owners can update everything including COMPLETED status
       return payload
     }
 
@@ -178,7 +244,7 @@ export class TaskService {
 
       if (status !== undefined) {
         throw new ForbiddenException(
-          'As task owner, you cannot update task status. Only assignee can update status.'
+          'As task owner, you cannot update task status. Only assignee can update status or PM can approve.',
         )
       }
 
@@ -190,10 +256,33 @@ export class TaskService {
       const { status, attachments, ...otherFields } = payload
 
       // Check if assignee is trying to update forbidden fields
-      const forbiddenFields = Object.keys(otherFields).filter(key => otherFields[key] !== undefined)
+      const forbiddenFields = Object.keys(otherFields).filter(
+        (key) => otherFields[key] !== undefined,
+      )
       if (forbiddenFields.length > 0) {
         throw new ForbiddenException(
-          `As task assignee, you can only update status and upload files. Cannot update: ${forbiddenFields.join(', ')}`
+          `As task assignee, you can only update status and upload files. Cannot update: ${forbiddenFields.join(', ')}`,
+        )
+      }
+
+      // Check if assignee is trying to set status to COMPLETED directly
+      if (status === TaskStatus.COMPLETED) {
+        throw new ForbiddenException(
+          'You cannot set task status to COMPLETED directly. It will be set to PENDING_APPROVAL for PM review.',
+        )
+      }
+
+      // Only allow PENDING, PROCESSING, PENDING_APPROVAL for assignees
+      if (
+        status &&
+        ![
+          TaskStatus.PENDING,
+          TaskStatus.PROCESSING,
+          TaskStatus.PENDING_APPROVAL,
+        ].includes(status)
+      ) {
+        throw new ForbiddenException(
+          'As task assignee, you can only set status to PENDING, PROCESSING, or submit for approval. COMPLETED status is set by PM approval.',
         )
       }
 
@@ -239,6 +328,7 @@ export class TaskService {
       return {
         pending: 0,
         processing: 0,
+        pendingApproval: 0,
         completed: 0,
         overdue: 0,
       }
@@ -274,6 +364,11 @@ export class TaskService {
               $cond: [{ $eq: ['$status', TaskStatus.PROCESSING] }, 1, 0],
             },
           },
+          pendingApproval: {
+            $sum: {
+              $cond: [{ $eq: ['$status', TaskStatus.PENDING_APPROVAL] }, 1, 0],
+            },
+          },
           completed: {
             $sum: {
               $cond: [{ $eq: ['$status', TaskStatus.COMPLETED] }, 1, 0],
@@ -292,6 +387,7 @@ export class TaskService {
       return {
         pending: 0,
         processing: 0,
+        pendingApproval: 0,
         completed: 0,
         overdue: 0,
       }
@@ -301,15 +397,19 @@ export class TaskService {
     return {
       pending: result.pending || 0,
       processing: result.processing || 0,
+      pendingApproval: result.pendingApproval || 0,
       completed: result.completed || 0,
       overdue: result.overdue || 0,
     }
   }
 
-  async getUserTaskStatsBySpace(userId: string, spaceId: string): Promise<TaskStatsDto> {
+  async getUserTaskStatsBySpace(
+    userId: string,
+    spaceId: string,
+  ): Promise<TaskStatsDto> {
     // Tìm tất cả project trong space trước
     const projectsInSpace = await this.db.project.find({ space: spaceId })
-    const projectIdsInSpace = projectsInSpace.map(p => p._id)
+    const projectIdsInSpace = projectsInSpace.map((p) => p._id)
 
     console.log('Debug - projectsInSpace:', projectsInSpace.length)
     console.log('Debug - spaceId:', spaceId)
@@ -317,7 +417,7 @@ export class TaskService {
     // Tìm các project mà user là member
     const userProjects = await this.db.projectMember.find({
       user: userId,
-      project: { $in: projectIdsInSpace }
+      project: { $in: projectIdsInSpace },
     })
 
     console.log('Debug - userProjects in space:', userProjects.length)
@@ -326,6 +426,7 @@ export class TaskService {
       return {
         pending: 0,
         processing: 0,
+        pendingApproval: 0,
         completed: 0,
         overdue: 0,
       }
@@ -364,6 +465,7 @@ export class TaskService {
       return {
         pending: 0,
         processing: 0,
+        pendingApproval: 0,
         completed: 0,
         overdue: 0,
       }
@@ -399,6 +501,11 @@ export class TaskService {
               $cond: [{ $eq: ['$status', TaskStatus.PROCESSING] }, 1, 0],
             },
           },
+          pendingApproval: {
+            $sum: {
+              $cond: [{ $eq: ['$status', TaskStatus.PENDING_APPROVAL] }, 1, 0],
+            },
+          },
           completed: {
             $sum: {
               $cond: [{ $eq: ['$status', TaskStatus.COMPLETED] }, 1, 0],
@@ -417,6 +524,7 @@ export class TaskService {
       return {
         pending: 0,
         processing: 0,
+        pendingApproval: 0,
         completed: 0,
         overdue: 0,
       }
@@ -426,8 +534,199 @@ export class TaskService {
     return {
       pending: result.pending || 0,
       processing: result.processing || 0,
+      pendingApproval: result.pendingApproval || 0,
       completed: result.completed || 0,
       overdue: result.overdue || 0,
     }
+  }
+
+  async findPendingApprovalTasks(
+    userId: string,
+    query: QueryPendingApprovalTasksDto,
+  ) {
+    const { page = 1, limit = 10, project, space } = query
+
+    // Build filter for tasks that need approval
+    const filter: FilterQuery<Task> = {
+      status: TaskStatus.PENDING_APPROVAL,
+    }
+
+    if (project) {
+      filter.project = project
+    }
+
+    if (space) {
+      filter.space = space
+    }
+
+    // Get user info to check if they can approve tasks
+    const user = await this.db.user.findById(userId)
+    if (!user) {
+      throw new NotFoundException('User not found')
+    }
+
+    // If user is PM, they can see all pending approval tasks
+    // If user is project owner, they can see tasks in their projects only
+    if (user.role === SystemRole.PROJECT_MANAGER) {
+      // PM can see all pending approval tasks (no additional filter needed)
+    } else {
+      // For project owners, filter by projects they own
+      const ownedProjects = await this.db.projectMember
+        .find({
+          user: userId,
+          role: ProjectRole.OWNER,
+        })
+        .select('project')
+
+      if (ownedProjects.length === 0) {
+        // User is not PM and doesn't own any projects
+        return {
+          data: [],
+          meta: {
+            total: 0,
+            page,
+            limit,
+            totalPages: 0,
+          },
+        }
+      }
+
+      const projectIds = ownedProjects.map((p) => p.project.toString())
+      filter.project = { $in: projectIds }
+    }
+
+    const [data, total] = await Promise.all([
+      this.db.task
+        .find(filter)
+        .populate('assignee', 'fullName email')
+        .populate('owner', 'fullName email')
+        .populate('project', 'name')
+        .populate('space', 'name')
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit),
+      this.db.task.countDocuments(filter),
+    ])
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    }
+  }
+
+  async approveTask(
+    taskId: IdLike<string>,
+    payload: ApproveTaskDto,
+    actor: any,
+  ) {
+    const task = await this.db.task.findById(taskId)
+    if (!task) {
+      throw new NotFoundException('Task not found')
+    }
+
+    if (task.status !== TaskStatus.PENDING_APPROVAL) {
+      throw new BadRequestException('Task is not pending approval')
+    }
+
+    // Check if actor has permission to approve
+    const actorId = actor._id || actor.sub
+    const user = await this.db.user.findById(actorId)
+
+    if (!user) {
+      throw new NotFoundException('User not found')
+    }
+
+    // Check if user is PM or project owner
+    const canApprove =
+      user.role === SystemRole.PROJECT_MANAGER ||
+      (await this.db.projectMember.findOne({
+        user: actorId,
+        project: task.project,
+        role: ProjectRole.OWNER,
+      }))
+
+    if (!canApprove) {
+      throw new ForbiddenException(
+        'You do not have permission to approve this task',
+      )
+    }
+
+    // Update task status to COMPLETED
+    const updatedTask = await this.db.task.findOneAndUpdate(
+      { _id: taskId },
+      {
+        status: TaskStatus.COMPLETED,
+        approvedBy: actorId,
+        approvedAt: new Date(),
+        reviewComment: payload.comment,
+        completedAt: new Date(),
+      },
+      { new: true },
+    )
+
+    // Send notification to assignee
+    await this.notificationService.notifyTaskApproved(updatedTask, actor)
+
+    return updatedTask
+  }
+
+  async rejectTask(taskId: IdLike<string>, payload: RejectTaskDto, actor: any) {
+    const task = await this.db.task.findById(taskId)
+    if (!task) {
+      throw new NotFoundException('Task not found')
+    }
+
+    if (task.status !== TaskStatus.PENDING_APPROVAL) {
+      throw new BadRequestException('Task is not pending approval')
+    }
+
+    // Check if actor has permission to reject
+    const actorId = actor._id || actor.sub
+    const user = await this.db.user.findById(actorId)
+
+    if (!user) {
+      throw new NotFoundException('User not found')
+    }
+
+    // Check if user is PM or project owner
+    const canReject =
+      user.role === SystemRole.PROJECT_MANAGER ||
+      (await this.db.projectMember.findOne({
+        user: actorId,
+        project: task.project,
+        role: ProjectRole.OWNER,
+      }))
+
+    if (!canReject) {
+      throw new ForbiddenException(
+        'You do not have permission to reject this task',
+      )
+    }
+
+    // Update task status back to PROCESSING
+    const updatedTask = await this.db.task.findOneAndUpdate(
+      { _id: taskId },
+      {
+        status: TaskStatus.PROCESSING,
+        rejectedBy: actorId,
+        rejectedAt: new Date(),
+        reviewComment: payload.reason,
+      },
+      { new: true },
+    )
+
+    // Send notification to assignee
+    await this.notificationService.notifyTaskRejected(
+      updatedTask,
+      actor,
+      payload.reason,
+    )
+
+    return updatedTask
   }
 }

@@ -1,6 +1,12 @@
-import {ApiProperty, ApiPropertyOptional} from '@nestjs/swagger'
-import {IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString} from 'class-validator'
-import {SystemRole} from "../../../common/enums";
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+import {
+  IsEmail,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+} from 'class-validator'
+import { SystemRole } from '../../../common/enums'
 
 export class RegisterDto {
   @ApiProperty({
@@ -30,5 +36,5 @@ export class RegisterDto {
   @ApiPropertyOptional({ enum: SystemRole })
   @IsOptional()
   @IsEnum(SystemRole)
-  role?: SystemRole;
+  role?: SystemRole
 }

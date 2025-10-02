@@ -31,7 +31,8 @@ export class BOMController {
   @Get('dashboard')
   @ApiOperation({
     summary: 'Get complete BOM dashboard data',
-    description: 'Returns all dashboard data for BOM role including overview, progress, performance metrics, and risk analysis'
+    description:
+      'Returns all dashboard data for BOM role including overview, progress, performance metrics, and risk analysis',
   })
   @ApiResponse({
     status: 200,
@@ -47,7 +48,8 @@ export class BOMController {
   @Get('dashboard/overview')
   @ApiOperation({
     summary: 'Get project status overview',
-    description: 'Returns total projects count and breakdown by status (Active, Completed On-time, Overdue)'
+    description:
+      'Returns total projects count and breakdown by status (Active, Completed On-time, Overdue)',
   })
   @ApiResponse({
     status: 200,
@@ -61,9 +63,10 @@ export class BOMController {
   }
 
   @Get('dashboard/system-progress')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Get system-wide task progress',
-    description: 'Returns task statistics across the entire system including pending, processing, completed, and overdue tasks'
+    description:
+      'Returns task statistics across the entire system including pending, processing, completed, and overdue tasks',
   })
   @ApiResponse({
     status: 200,
@@ -79,7 +82,8 @@ export class BOMController {
   @Get('dashboard/space-performance')
   @ApiOperation({
     summary: 'Get performance metrics by space',
-    description: 'Returns performance metrics for each space including project counts, completion rates, and overdue tasks'
+    description:
+      'Returns performance metrics for each space including project counts, completion rates, and overdue tasks',
   })
   @ApiResponse({
     status: 200,
@@ -95,7 +99,8 @@ export class BOMController {
   @Get('dashboard/pm-performance')
   @ApiOperation({
     summary: 'Get performance metrics by Project Manager',
-    description: 'Returns performance metrics for each PM including project counts, completion rates, and overdue projects'
+    description:
+      'Returns performance metrics for each PM including project counts, completion rates, and overdue projects',
   })
   @ApiResponse({
     status: 200,
@@ -109,9 +114,10 @@ export class BOMController {
   }
 
   @Get('dashboard/risk-projects')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Get high-risk projects',
-    description: 'Returns projects with high percentage of overdue tasks, sorted by risk level'
+    description:
+      'Returns projects with high percentage of overdue tasks, sorted by risk level',
   })
   @ApiResponse({
     status: 200,
@@ -125,9 +131,10 @@ export class BOMController {
   }
 
   @Get('dashboard/kpi-metrics')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Get key performance indicators',
-    description: 'Returns main KPIs including completion rates, overdue counts, and average project duration'
+    description:
+      'Returns main KPIs including completion rates, overdue counts, and average project duration',
   })
   @ApiResponse({
     status: 200,
@@ -141,9 +148,9 @@ export class BOMController {
   }
 
   @Get('dashboard/weekly-progress')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Get weekly task completion progress',
-    description: 'Returns task completion trends over the last 12 weeks'
+    description: 'Returns task completion trends over the last 12 weeks',
   })
   @ApiResponse({
     status: 200,

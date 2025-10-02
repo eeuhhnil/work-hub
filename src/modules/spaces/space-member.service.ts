@@ -83,14 +83,19 @@ export class SpaceMemberService {
     if (!spaceMember) throw new NotFoundException('Space member not found')
 
     // Cascade delete: Remove user from all projects in this space
-    const projectsInSpace = await this.db.project.find({ space: spaceMember.space })
+    const projectsInSpace = await this.db.project.find({
+      space: spaceMember.space,
+    })
     for (const project of projectsInSpace) {
       const projectMember = await this.db.projectMember.findOne({
         project: project._id,
         user: spaceMember.user,
       })
       if (projectMember) {
-        await this.projectMemberService.deleteOne(projectMember._id.toString(), actorId)
+        await this.projectMemberService.deleteOne(
+          projectMember._id.toString(),
+          actorId,
+        )
       }
     }
 

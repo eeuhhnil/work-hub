@@ -37,6 +37,9 @@ export class SystemProgressDto {
   processingTasks: number
 
   @ApiProperty()
+  pendingApprovalTasks: number
+
+  @ApiProperty()
   completedTasks: number
 
   @ApiProperty()

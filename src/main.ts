@@ -41,6 +41,10 @@ async function bootstrap() {
   const swaggerConfig = new DocumentBuilder()
     .setTitle('portfolio apis')
     .setDescription('The portfolio management apis')
+    .addServer(
+      `http://localhost:${config.get('PORT')}`,
+      `Development API[PORT=${config.get('PORT')}]`,
+    )
     .addServer(`https://workhub-api.eeuhhnil.work`, 'Production API')
     .setVersion('1.0.0')
     .addBearerAuth({
