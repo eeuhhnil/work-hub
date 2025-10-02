@@ -1,6 +1,6 @@
 FROM node:20-alpine AS build-stage
 
-WORKDIR /work_hub_api
+WORKDIR /app
 
 COPY package.json .
 
@@ -12,11 +12,12 @@ RUN npm run build
 
 FROM node:20-alpine AS prod-stage
 
-COPY --from=build-stage /work_hub_api/dist /work_hub_api/dist
-COPY --from=build-stage /work_hub_api/package.json /work_hub_api/package.json
+COPY --from=build-stage /app/dist /app/dist
+COPY --from=build-stage /app/package.json /app/package.json
 
-WORKDIR /work_hub_api
+WORKDIR /app
 
 RUN npm install --production
 
-CMD ["npm", "run", "start:prod"]
+EXPOSE 3000
+CMD ["node", "dist/main.js"]

@@ -43,7 +43,7 @@ import { BOMModule } from './modules/bom/bom.module'
           secure: true,
           auth: {
             user: configService.get<string>('MAIL_USER'),
-            pass: configService.get<string>('MAIL_PASSWORD'),
+            pass: configService.get<string>('MAIL_PASS'),
           },
         },
         defaults: {
